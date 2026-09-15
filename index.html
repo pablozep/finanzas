@@ -590,7 +590,28 @@ function aplicarCola(){
   var r = JSON.parse(JSON.stringify(resumenServidor));
   var pend = leerCola().filter(function(x){ return x.anio === anio && x.mes === mes; });
 
-  pend.forEach(function(p){
+  // Primero las eliminaciones: se quitan de la lista y se restan de los totales
+  pend.filter(function(p){ return p.op === 'eliminar'; }).forEach(function(p){
+    var m = p.mov;
+    r.movimientos = r.movimientos.filter(function(x){ return x.id !== m.id; });
+    var bloque = (m.tipo === 'Ingreso') ? r.ingresos : r.egresos;
+    bloque.real -= m.monto;
+    bloque.diferencia = bloque.real - bloque.ppto;
+    var cat = r.categorias.filter(function(c){ return c.categoria === m.categoria; })[0];
+    if (cat) {
+      cat.real -= m.monto;
+      cat.diferencia = cat.real - cat.ppto;
+      cat.avance = cat.ppto > 0 ? cat.real / cat.ppto : null;
+    }
+    var inf = (catalogo && catalogo.categorias.filter(function(x){
+      return x.categoria === m.categoria; })[0]) || {};
+    if (m.tipo === 'Egreso' && inf.grupo) {
+      var g = r.grupos.filter(function(x){ return x.grupo === inf.grupo; })[0];
+      if (g) { g.real -= m.monto; g.diferencia = g.real - g.ppto; }
+    }
+  });
+
+  pend.filter(function(p){ return p.op !== 'eliminar'; }).forEach(function(p){
     var info = (catalogo && catalogo.categorias.filter(function(x){
       return x.categoria === p.categoria; })[0]) || {};
 
@@ -719,19 +740,22 @@ function procesarCola(){
   procesandoCola = true;
   ocupado(true);
 
-  return enviar({
-    action: 'crear', uid: item.uid, tipo: item.tipo, categoria: item.categoria,
-    monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
-    medio: item.medio, origen: item.origen
-  }).then(function(){
+  var cuerpo = (item.op === 'eliminar')
+    ? { action: 'eliminar', uid: item.uid, id: item.mov.id, anio: item.anio }
+    : { action: 'crear', uid: item.uid, tipo: item.tipo, categoria: item.categoria,
+        monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
+        medio: item.medio, origen: item.origen };
+
+  return enviar(cuerpo).then(function(){
     procesandoCola = false;
     var resto = leerCola().filter(function(x){ return x.uid !== item.uid; });
     guardarCola(resto);
+    pintarBanda();                       // sin esto la banda quedaba pegada
     limpiarCacheMes(item.anio, item.mes);
     limpiarCacheAnual(item.anio);
     if (resto.filter(function(x){ return !x.bloqueado; }).length) return procesarCola();
     ocupado(false);
-    return sincronizar().catch(function(){});
+    return sincronizar().then(pintarBanda).catch(pintarBanda);
   }).catch(function(e){
     procesandoCola = false;
     ocupado(false);
@@ -763,6 +787,12 @@ $('bandaBtn').onclick = function(){
   }
   procesarCola();
 };
+
+// Reintento periodico mientras queden pendientes sin bloquear
+setInterval(function(){
+  if (document.hidden) return;
+  if (leerCola().filter(function(x){ return !x.bloqueado; }).length) procesarCola();
+}, 20000);
 
 // Reintenta al volver a la app o al recuperar conexion
 document.addEventListener('visibilitychange', function(){
@@ -1164,8 +1194,11 @@ $('movClose').onclick = cerrarTodo;
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarTodo(); });
 
 $('reload').onclick = function(){
-  if (leerCola().length) procesarCola();
-  else sincronizar().catch(function(){});
+  // Siempre las dos cosas: vaciar la cola y traer lo que hayan cambiado otros
+  // dispositivos. Antes, con la cola atascada, nunca se refrescaba.
+  procesarCola().then(function(){
+    return sincronizar();
+  }).catch(function(){}).then(pintarBanda);
 };
 $('openCfg').onclick = function(){ abrir('cfgSheet'); };
 $('cfgSave2').onclick = function(){
@@ -1297,22 +1330,29 @@ $('movDelete').onclick = function(){
     setTimeout(function(){ b.dataset.armed = ''; b.textContent = 'Eliminar movimiento'; }, 4000);
     return;
   }
-  b.dataset.armed = ''; b.disabled = true; b.textContent = 'Eliminando…';
+  b.dataset.armed = '';
+
+  // Si todavia no habia salido de la cola, basta con sacarlo de ahi
   if (movSel && movSel.pendiente) {
     guardarCola(leerCola().filter(function(x){ return x.uid !== movSel.id; }));
     cerrarTodo(); toast('Movimiento descartado');
-    b.disabled = false; b.textContent = 'Eliminar movimiento';
     repintar();
     return;
   }
-  enviar({action:'eliminar', id: movSel.id, anio: anio}).then(function(){
-    cerrarTodo(); toast('Movimiento eliminado');
-    limpiarCacheMes(anio, mes);
-    invalidarAnual(anio);
-    sincronizar().catch(function(){});
-  }).catch(function(e){
-    b.disabled = false; b.textContent = 'Eliminar movimiento'; toast('Error: ' + e.message);
+
+  // Ya esta en la hoja: se encola la eliminacion y la pantalla se actualiza ya
+  var cola = leerCola();
+  cola.push({
+    uid: nuevoUid(), op: 'eliminar', anio: anio, mes: mes, intentos: 0,
+    mov: { id: movSel.id, tipo: movSel.tipo, categoria: movSel.categoria,
+           monto: movSel.monto, fecha: movSel.fecha }
   });
+  guardarCola(cola);
+  cerrarTodo(); toast('Eliminado');
+  limpiarCacheMes(anio, mes);
+  limpiarCacheAnual(anio);
+  repintar();
+  procesarCola();
 };
 
 // El manifiesto y los iconos viven en archivos aparte (manifest.json,
