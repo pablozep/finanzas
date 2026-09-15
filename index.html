@@ -153,6 +153,8 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   padding:11px 20px;border-radius:999px;font-weight:700;font-size:14px;z-index:90;
   opacity:0;pointer-events:none;transition:opacity .22s}
 .toast.on{opacity:1}
+@keyframes giro{to{transform:rotate(360deg)}}
+#reload.busy{color:var(--accent);animation:giro .9s linear infinite}
 .skel{background:linear-gradient(90deg,#F2F0EC 25%,#E9E6E1 50%,#F2F0EC 75%);
   background-size:200% 100%;animation:sk 1.3s linear infinite;border-radius:12px}
 @keyframes sk{to{background-position:-200% 0}}
@@ -348,6 +350,16 @@ function esc(s){
   });
 }
 
+// ══════════ CACHE LOCAL ══════════
+// Guarda la ultima respuesta buena de cada mes para poder pintar la pantalla
+// al instante mientras se pide la version fresca al servidor.
+function claveMes(a, m){ return 'fin.res.' + a + '-' + m; }
+function guardarCache(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function leerCache(k){
+  try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch(e){ return null; }
+}
+function limpiarCacheMes(a, m){ try { localStorage.removeItem(claveMes(a, m)); } catch(e){} }
+
 // ══════════ RED ══════════
 function pedir(params){
   var q = Object.keys(params).map(function(k){
@@ -394,7 +406,43 @@ function iniciar(){
   $('cfgUrl2').value = URL_BASE; $('cfgToken2').value = TOKEN;
   $('fDate').value = iso(new Date());
   construirTeclado();
-  cargarCatalogo().then(cargarMes).catch(mostrarError);
+  $('mLabel').textContent = etiquetaMes();
+
+  var cat = leerCache('fin.cat');
+  if (cat) { aplicarCatalogo(cat); }
+  var res = leerCache(claveMes(anio, mes));
+  if (res) { resumen = res; mostrarContenido(); }
+
+  sincronizar();
+}
+
+function mostrarContenido(){
+  $('loading').classList.add('hidden');
+  $('content').classList.remove('hidden');
+  pintarTodo();
+}
+
+function ocupado(si){ $('reload').classList.toggle('busy', !!si); }
+
+/** Una sola peticion trae catalogo y resumen. */
+function sincronizar(opciones){
+  opciones = opciones || {};
+  ocupado(true);
+  $('err').classList.add('hidden');
+  var params = {action:'inicio', anio:anio, mes:mes};
+  if (opciones.refrescar) params.refrescar = 1;
+  return pedir(params).then(function(d){
+    aplicarCatalogo(d.catalogo);
+    guardarCache('fin.cat', d.catalogo);
+    resumen = d.resumen;
+    guardarCache(claveMes(anio, mes), d.resumen);
+    mostrarContenido();
+    ocupado(false);
+  }).catch(function(e){
+    ocupado(false);
+    if (!resumen) mostrarError(e); else toast('Sin conexion con la hoja');
+    throw e;
+  });
 }
 
 function mostrarError(err){
@@ -406,15 +454,13 @@ function mostrarError(err){
   e.classList.remove('hidden');
 }
 
-function cargarCatalogo(){
-  return pedir({action:'catalogo'}).then(function(d){
-    catalogo = d;
-    var sel = $('fMedio');
-    sel.innerHTML = '<option value=""></option>' + d.medios.map(function(m){
-      return '<option>' + esc(m) + '</option>';
-    }).join('');
-    pintarCategorias();
-  });
+function aplicarCatalogo(d){
+  catalogo = d;
+  var sel = $('fMedio');
+  sel.innerHTML = '<option value=""></option>' + d.medios.map(function(m){
+    return '<option>' + esc(m) + '</option>';
+  }).join('');
+  pintarCategorias();
 }
 
 // ══════════ MES ══════════
@@ -427,15 +473,15 @@ $('nextM').onclick = function(){ mes++; if (mes > 12){ mes = 1; anio++; } cargar
 
 function cargarMes(){
   $('mLabel').textContent = etiquetaMes();
-  $('content').classList.add('hidden');
-  $('err').classList.add('hidden');
-  $('loading').classList.remove('hidden');
-  return pedir({action:'resumen', anio:anio, mes:mes}).then(function(d){
-    resumen = d;
-    $('loading').classList.add('hidden');
-    $('content').classList.remove('hidden');
-    pintarTodo();
-  }).catch(mostrarError);
+  var res = leerCache(claveMes(anio, mes));
+  if (res) {
+    resumen = res;
+    mostrarContenido();
+  } else {
+    $('content').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+  }
+  return sincronizar().catch(function(){});
 }
 
 // ══════════ PINTADO ══════════
@@ -588,7 +634,7 @@ $('cfgClose').onclick = cerrarTodo;
 $('movClose').onclick = cerrarTodo;
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarTodo(); });
 
-$('reload').onclick = function(){ cargarMes(); };
+$('reload').onclick = function(){ sincronizar().catch(function(){}); };
 $('openCfg').onclick = function(){ abrir('cfgSheet'); };
 $('cfgSave2').onclick = function(){
   var u = $('cfgUrl2').value.trim(), t = $('cfgToken2').value.trim();
@@ -596,11 +642,13 @@ $('cfgSave2').onclick = function(){
   URL_BASE = u; TOKEN = t;
   localStorage.setItem('fin.url', u); localStorage.setItem('fin.token', t);
   cerrarTodo(); toast('Guardado');
-  cargarCatalogo().then(cargarMes).catch(mostrarError);
+  try { localStorage.removeItem('fin.cat'); } catch(e){}
+  sincronizar({refrescar:true}).catch(function(){});
 };
 $('cfgRefresh').onclick = function(){
-  cargarCatalogo().then(function(){ cerrarTodo(); toast('Categorías actualizadas'); })
-    .catch(function(e){ toast('Error: ' + e.message); });
+  sincronizar({refrescar:true}).then(function(){
+    cerrarTodo(); toast('Categorías actualizadas');
+  }).catch(function(e){ toast('Error: ' + e.message); });
 };
 
 // ══════════ NUEVO MOVIMIENTO ══════════
@@ -676,8 +724,10 @@ $('save').onclick = function(){
     btn.textContent = 'Guardar';
     cerrarTodo(); toast('Movimiento guardado');
     var f = $('fDate').value.split('-');
-    if (Number(f[0]) === anio && Number(f[1]) === mes) cargarMes();
-    else { anio = Number(f[0]); mes = Number(f[1]); cargarMes(); }
+    limpiarCacheMes(Number(f[0]), Number(f[1]));
+    anio = Number(f[0]); mes = Number(f[1]);
+    $('mLabel').textContent = etiquetaMes();
+    sincronizar().catch(function(){});
   }).catch(function(e){
     btn.textContent = 'Guardar'; btn.disabled = false;
     var a = $('addErr'); a.textContent = e.message; a.classList.remove('hidden');
@@ -709,7 +759,9 @@ $('movDelete').onclick = function(){
   }
   b.dataset.armed = ''; b.disabled = true; b.textContent = 'Eliminando…';
   enviar({action:'eliminar', id: movSel.id, anio: anio}).then(function(){
-    cerrarTodo(); toast('Movimiento eliminado'); cargarMes();
+    cerrarTodo(); toast('Movimiento eliminado');
+    limpiarCacheMes(anio, mes);
+    sincronizar().catch(function(){});
   }).catch(function(e){
     b.disabled = false; b.textContent = 'Eliminar movimiento'; toast('Error: ' + e.message);
   });
