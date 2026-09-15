@@ -708,7 +708,7 @@ $('movDelete').onclick = function(){
     return;
   }
   b.dataset.armed = ''; b.disabled = true; b.textContent = 'Eliminando…';
-  enviar({action:'eliminar', id: movSel.id}).then(function(){
+  enviar({action:'eliminar', id: movSel.id, anio: anio}).then(function(){
     cerrarTodo(); toast('Movimiento eliminado'); cargarMes();
   }).catch(function(e){
     b.disabled = false; b.textContent = 'Eliminar movimiento'; toast('Error: ' + e.message);
