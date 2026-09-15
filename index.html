@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
 <title>Finanzas</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
@@ -767,24 +769,9 @@ $('movDelete').onclick = function(){
   });
 };
 
-// ══════════ INSTALABLE ══════════
-(function(){
-  var manifest = {
-    name: 'Finanzas', short_name: 'Finanzas', start_url: '.', display: 'standalone',
-    background_color: '#FBFAF8', theme_color: '#FBFAF8',
-    icons: [{
-      src: 'data:image/svg+xml,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">' +
-        '<rect width="192" height="192" rx="42" fill="#F2854B"/>' +
-        '<text x="96" y="128" font-size="96" text-anchor="middle">$</text></svg>'),
-      sizes: '192x192', type: 'image/svg+xml', purpose: 'any'
-    }]
-  };
-  var link = document.createElement('link');
-  link.rel = 'manifest';
-  link.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(manifest));
-  document.head.appendChild(link);
-})();
+// El manifiesto y los iconos viven en archivos aparte (manifest.json,
+// icono-192.png, icono-512.png, apple-touch-icon.png), porque una URL de
+// datos no puede resolver rutas relativas a las imagenes.
 </script>
 </body>
 </html>
