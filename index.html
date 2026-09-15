@@ -746,7 +746,12 @@ function procesarCola(){
         monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
         medio: item.medio, origen: item.origen };
 
-  return enviar(cuerpo).then(function(){
+  // Pedimos el resumen en la misma respuesta: una peticion en vez de dos
+  cuerpo.conResumen = true;
+  cuerpo.resumenAnio = anio;
+  cuerpo.resumenMes = mes;
+
+  return enviar(cuerpo).then(function(datos){
     procesandoCola = false;
     var resto = leerCola().filter(function(x){ return x.uid !== item.uid; });
     guardarCola(resto);
@@ -755,6 +760,14 @@ function procesarCola(){
     limpiarCacheAnual(item.anio);
     if (resto.filter(function(x){ return !x.bloqueado; }).length) return procesarCola();
     ocupado(false);
+
+    // Si el servidor ya nos mando el resumen, no hace falta otra peticion
+    if (datos && datos.resumen && datos.resumen.anio === anio && datos.resumen.mes === mes) {
+      resumenServidor = datos.resumen;
+      guardarCache(claveMes(anio, mes), datos.resumen);
+      repintar();
+      return;
+    }
     return sincronizar().then(pintarBanda).catch(pintarBanda);
   }).catch(function(e){
     procesandoCola = false;
