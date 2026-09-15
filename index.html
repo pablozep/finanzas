@@ -19,6 +19,7 @@
   --line:#ECEAE5; --accent:#F2854B; --accent-soft:#FDEDE2;
   --pos:#2E9E6B; --neg:#E05252;
   --r:18px; --pad:20px;
+  --ease:cubic-bezier(.32,.72,0,1);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -34,21 +35,55 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .hidden{display:none !important}
 .app{max-width:520px;margin:0 auto;padding:0 16px;padding-top:calc(12px + env(safe-area-inset-top))}
 
+/* ---------- vidrio (iOS 26) ---------- */
+/* Solo superficies que flotan sobre contenido: barra superior, tabs, fab,
+   hojas inferiores y píldoras. Nunca detrás de barras/anillo/gráfico/tarjetas. */
+.top, .tabs, .sheet, .pill{
+  background:rgba(255,255,255,.88);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7);
+}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .top, .tabs, .sheet, .pill{
+    background:rgba(255,255,255,.55);
+    -webkit-backdrop-filter:blur(22px) saturate(1.7);
+    backdrop-filter:blur(22px) saturate(1.7);
+  }
+  .fab{
+    background:rgba(242,133,75,.8);
+    -webkit-backdrop-filter:blur(22px) saturate(1.7);
+    backdrop-filter:blur(22px) saturate(1.7);
+  }
+}
+
 /* ---------- barra superior ---------- */
-.top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0 14px}
-.month{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);
+.topbar{position:sticky;top:env(safe-area-inset-top);z-index:20}
+.topbar::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  background:rgba(36,42,56,.14);opacity:0;transition:opacity 180ms var(--ease)}
+.topbar.scrolled::after{opacity:1}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:9px 12px;margin:6px 0 10px;border-radius:22px}
+.month{display:flex;align-items:center;gap:2px;border:1px solid rgba(36,42,56,.1);
   border-radius:999px;padding:4px 6px}
 .month button{width:30px;height:30px;border-radius:50%;font-size:17px;color:var(--muted);display:grid;place-items:center}
 .month button:active{background:var(--bg)}
 .month span{font-weight:800;font-size:15px;min-width:104px;text-align:center}
-.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--surface);border:1px solid var(--line);
+.icon-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(36,42,56,.1);
   display:grid;place-items:center;font-size:17px}
 .icon-btn:active{background:var(--accent-soft)}
 
 /* ---------- selector simple / avanzada ---------- */
-.tabs{display:flex;background:#F1EFEB;border-radius:999px;padding:3px;margin:0 0 20px}
+.tabs{display:flex;border-radius:999px;padding:3px;margin:0 0 20px}
 .tabs button{flex:1;padding:8px;border-radius:999px;font-weight:800;font-size:14px;color:var(--muted)}
 .tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+
+/* ---------- cruce entre vistas y navegacion de mes ---------- */
+#viewSimple, #viewAdv{transition:opacity 180ms var(--ease), transform 180ms var(--ease)}
+.view-out{opacity:0;transform:translateY(-4px)}
+.view-in{opacity:0;transform:translateY(4px)}
+@keyframes slideInNext{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInPrev{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+.slide-in-next{animation:slideInNext 220ms var(--ease)}
+.slide-in-prev{animation:slideInPrev 220ms var(--ease)}
 
 /* ---------- héroe ---------- */
 .hero{text-align:center;padding:6px 0 22px}
@@ -57,7 +92,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .hero .amount{font-size:44px;font-weight:800;letter-spacing:-1.5px;line-height:1.15;margin:2px 0 14px}
 .hero .amount.neg{color:var(--neg)}
 .pills{display:flex;gap:8px;justify-content:center}
-.pill{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);
+.pill{display:flex;align-items:center;gap:7px;border:1px solid var(--line);
   border-radius:999px;padding:7px 14px;font-weight:800;font-size:14px}
 .dot{width:9px;height:9px;border-radius:50%}
 .dot.out{background:var(--neg)} .dot.in{background:var(--pos)}
@@ -72,6 +107,9 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .bar .val{font-size:12px;font-weight:800;margin-top:3px}
 .bar .pct{font-size:11px;font-weight:600;opacity:.62}
 .bars-legend{font-size:12px;color:var(--muted);text-align:center;margin-bottom:22px}
+.bar .fill{transform-origin:bottom}
+@keyframes barGrow{from{opacity:0;transform:scaleY(.05)}to{opacity:1;transform:scaleY(1)}}
+.bars.animate-in .fill{animation:barGrow 320ms var(--ease) backwards}
 
 /* ---------- listas ---------- */
 .section-title{font-size:15px;font-weight:800;margin:24px 0 10px}
@@ -91,11 +129,13 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .anual-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
   padding:16px 12px 12px;margin-bottom:8px}
 .anual-wrap svg{display:block;width:100%;height:auto}
-.anual-point{fill:var(--accent);stroke:var(--surface);stroke-width:1.5;transition:r .15s}
+.anual-point{fill:var(--accent);stroke:var(--surface);stroke-width:1.5;transition:r .15s var(--ease)}
 .anual-point.active{r:5.5}
 .anual-hit{fill:transparent;cursor:pointer}
 .anual-detalle{text-align:center;font-size:13px;color:var(--muted);margin-top:6px}
 .anual-detalle b{color:var(--ink)}
+.anual-line{transition:stroke-dashoffset 600ms var(--ease)}
+.anual-reveal{transition:opacity 220ms var(--ease)}
 
 /* ---------- anillo ---------- */
 .ring-wrap{display:flex;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--line);
@@ -104,23 +144,28 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .leg{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
 .leg b{margin-left:auto;font-weight:800}
 .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+@keyframes segFill{from{opacity:0}to{opacity:1}}
+.ring-anim .anillo-seg, .ring-anim .anillo-txt{animation:segFill 260ms var(--ease) backwards}
 
 /* ---------- botón añadir ---------- */
 .fab{position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(22px + env(safe-area-inset-bottom));
   background:var(--accent);color:#fff;font-weight:800;font-size:15.5px;
-  border-radius:999px;padding:14px 30px;box-shadow:0 6px 20px rgba(242,133,75,.38);
-  display:flex;align-items:center;gap:8px;z-index:40}
-.fab:active{transform:translateX(-50%) scale(.96)}
+  border-radius:999px;padding:14px 30px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 6px 20px rgba(242,133,75,.38);
+  display:flex;align-items:center;gap:8px;z-index:40;
+  transition:transform 120ms var(--ease), box-shadow 120ms var(--ease)}
+.fab:active{transform:translateX(-50%) scale(.94);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 10px rgba(242,133,75,.32)}
 
 /* ---------- hoja inferior ---------- */
 .scrim{position:fixed;inset:0;background:rgba(30,26,22,.42);z-index:50;opacity:0;pointer-events:none;
-  transition:opacity .22s}
+  transition:opacity .22s var(--ease)}
 .scrim.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--surface);
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;
   border-radius:26px 26px 0 0;padding:8px 18px calc(20px + env(safe-area-inset-bottom));
   max-width:520px;margin:0 auto;max-height:94vh;overflow-y:auto;
-  transform:translateY(102%);transition:transform .26s cubic-bezier(.32,.72,0,1)}
+  transform:translateY(102%);transition:transform .26s var(--ease)}
 .sheet.on{transform:translateY(0)}
 .grabber{width:38px;height:4px;border-radius:99px;background:var(--line);margin:6px auto 14px}
 .sheet h2{font-size:18px;font-weight:800;margin:0 0 14px}
@@ -163,8 +208,10 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   font-weight:600;margin-bottom:14px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;background:var(--ink);color:#fff;
   padding:11px 20px;border-radius:999px;font-weight:700;font-size:14px;z-index:90;
-  opacity:0;pointer-events:none;transition:opacity .22s}
+  opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
 .toast.on{opacity:1}
+@keyframes rowIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.row-new{animation:rowIn 260ms var(--ease)}
 @keyframes giro{to{transform:rotate(360deg)}}
 #reload.busy{color:var(--accent);animation:giro .9s linear infinite}
 .skel{background:linear-gradient(90deg,#F2F0EC 25%,#E9E6E1 50%,#F2F0EC 75%);
@@ -201,21 +248,23 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 
 <!-- ══════════ PANTALLA PRINCIPAL ══════════ -->
 <div class="app hidden" id="main">
-  <div class="top">
-    <div class="month">
-      <button id="prevM" aria-label="Mes anterior">‹</button>
-      <span id="mLabel">—</span>
-      <button id="nextM" aria-label="Mes siguiente">›</button>
+  <div class="topbar">
+    <div class="top">
+      <div class="month">
+        <button id="prevM" aria-label="Mes anterior">‹</button>
+        <span id="mLabel">—</span>
+        <button id="nextM" aria-label="Mes siguiente">›</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="icon-btn" id="reload" aria-label="Actualizar">↻</button>
+        <button class="icon-btn" id="openCfg" aria-label="Ajustes">⚙︎</button>
+      </div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button class="icon-btn" id="reload" aria-label="Actualizar">↻</button>
-      <button class="icon-btn" id="openCfg" aria-label="Ajustes">⚙︎</button>
-    </div>
-  </div>
 
-  <div class="tabs" role="tablist">
-    <button role="tab" id="tabSimple" aria-selected="true">Simple</button>
-    <button role="tab" id="tabAdv" aria-selected="false">Avanzada</button>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabSimple" aria-selected="true">Simple</button>
+      <button role="tab" id="tabAdv" aria-selected="false">Avanzada</button>
+    </div>
   </div>
 
   <div id="err" class="err hidden"></div>
@@ -335,6 +384,14 @@ var catalogo = null, resumen = null;
 var tipoSel = 'Egreso', catSel = null, digitos = '', movSel = null;
 var vistaSimple = true, anual = null, anualAnioMostrado = null;
 
+// ══════════ ANIMACION ══════════
+// Banderas de "un solo uso": se encienden justo antes de la accion que debe
+// animarse (carga inicial, cambio de mes, guardar) y pintarTodo() las apaga
+// apenas las lee. Asi el refresco en segundo plano que llega despues (misma
+// vista, misma llamada a pintarTodo) nunca las vuelve a encontrar en true.
+var REDUCE_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+var animarEntrada = false, direccionMes = 0, destacarPrimeraFila = false, anualPrimerPintado = false;
+
 var MESES = ['enero','febrero','marzo','abril','mayo','junio',
              'julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -429,6 +486,7 @@ function iniciar(){
   $('fDate').value = iso(new Date());
   construirTeclado();
   $('mLabel').textContent = etiquetaMes();
+  animarEntrada = true;
 
   var cat = leerCache('fin.cat');
   if (cat) { aplicarCatalogo(cat); }
@@ -437,6 +495,20 @@ function iniciar(){
 
   sincronizar();
 }
+
+// Linea divisoria del topbar: aparece solo cuando el contenido ya paso por debajo.
+(function(){
+  var topbarEl = document.querySelector('.topbar');
+  var ticking = false;
+  window.addEventListener('scroll', function(){
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      topbarEl.classList.toggle('scrolled', window.scrollY > 2);
+      ticking = false;
+    });
+  }, {passive:true});
+})();
 
 function mostrarContenido(){
   $('loading').classList.add('hidden');
@@ -490,8 +562,14 @@ function etiquetaMes(){
   var m = MESES[mes-1];
   return m.charAt(0).toUpperCase() + m.slice(1) + ' ' + anio;
 }
-$('prevM').onclick = function(){ mes--; if (mes < 1){ mes = 12; anio--; } cargarMes(); };
-$('nextM').onclick = function(){ mes++; if (mes > 12){ mes = 1; anio++; } cargarMes(); };
+$('prevM').onclick = function(){
+  mes--; if (mes < 1){ mes = 12; anio--; }
+  animarEntrada = true; direccionMes = -1; cargarMes();
+};
+$('nextM').onclick = function(){
+  mes++; if (mes > 12){ mes = 1; anio++; }
+  animarEntrada = true; direccionMes = 1; cargarMes();
+};
 
 function cargarMes(){
   $('mLabel').textContent = etiquetaMes();
@@ -509,6 +587,13 @@ function cargarMes(){
 
 // ══════════ PINTADO ══════════
 function pintarTodo(){
+  var animar = animarEntrada, dir = direccionMes;
+  animarEntrada = false; direccionMes = 0;
+  var destacar = destacarPrimeraFila;
+  destacarPrimeraFila = false;
+
+  if (animar && dir !== 0) animarEntradaContenido(dir);
+
   var saldo = resumen.saldo.real;
   var h = $('heroAmount');
   h.textContent = (saldo >= 0 ? '' : '−') + fmt(Math.abs(saldo));
@@ -525,33 +610,57 @@ function pintarTodo(){
   $('pillOut').textContent = fmt(resumen.egresos.real);
   $('pillIn').textContent = fmt(resumen.ingresos.real);
 
-  pintarBarras(); pintarRecientes(); pintarAnillo(); pintarListaCat(); pintarMovs();
+  pintarBarras(animar); pintarRecientes(destacar); pintarAnillo(animar); pintarListaCat(); pintarMovs(destacar);
 }
 
-function pintarBarras(){
+function animarEntradaContenido(dir){
+  if (REDUCE_MOTION) return;
+  var el = $('content');
+  var cls = dir > 0 ? 'slide-in-next' : 'slide-in-prev';
+  el.classList.remove('slide-in-next', 'slide-in-prev');
+  void el.offsetWidth;
+  el.classList.add(cls);
+  clearTimeout(el._slideT);
+  el._slideT = setTimeout(function(){ el.classList.remove(cls); }, 240);
+}
+
+function pintarBarras(animar){
   var top = resumen.categorias
     .filter(function(c){ return c.tipo === 'Egreso' && (c.real > 0 || c.ppto > 0); })
     .sort(function(a,b){ return b.real - a.real; }).slice(0,5);
   var cont = $('bars');
+  cont.classList.remove('animate-in');
   if (!top.length) {
     cont.innerHTML = '<div class="empty" style="margin:auto">Sin gastos este mes.<br>Toca Añadir para empezar.</div>';
     return;
   }
   var max = 0;
   top.forEach(function(c){ max = Math.max(max, c.real, c.ppto); });
-  cont.innerHTML = top.map(function(c){
+  cont.innerHTML = top.map(function(c, i){
     var t = tinte(c.grupo);
     var hR = Math.max(24, Math.round(c.real / max * 100));
     var hP = c.ppto > 0 ? Math.round(c.ppto / max * 100) : 0;
     var pct = c.ppto > 0 ? Math.round(c.real / c.ppto * 100) + '%' : '';
     return '<div class="bar" title="' + esc(c.categoria) + '">' +
       (hP ? '<div class="budget" style="height:' + hP + '%"></div>' : '') +
-      '<div class="fill" style="height:' + hR + '%;background:' + t[0] + ';color:' + t[1] + '">' +
+      '<div class="fill" style="height:' + hR + '%;background:' + t[0] + ';color:' + t[1] +
+        ';animation-delay:' + (i * 35) + 'ms">' +
         '<div class="emo">' + esc(c.emoji) + '</div>' +
         '<div class="val">' + corto(c.real) + '</div>' +
         (pct ? '<div class="pct">' + pct + '</div>' : '') +
       '</div></div>';
   }).join('');
+  if (animar && !REDUCE_MOTION) { void cont.offsetWidth; cont.classList.add('animate-in'); }
+}
+
+/** Repite la entrada de las barras al volver a la pestaña Simple ("al aparecer"). */
+function reproducirEntradaBarras(){
+  if (REDUCE_MOTION) return;
+  var cont = $('bars');
+  if (!cont.querySelector('.fill')) return;
+  cont.classList.remove('animate-in');
+  void cont.offsetWidth;
+  cont.classList.add('animate-in');
 }
 
 function filaMov(m){
@@ -567,15 +676,23 @@ function filaMov(m){
       (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto) + '</span></button>';
 }
 
-function pintarRecientes(){
+function pintarRecientes(destacar){
   var l = resumen.movimientos.slice(0,6);
   $('recent').innerHTML = l.length ? l.map(filaMov).join('')
     : '<div class="empty">Todavía no registras nada este mes.</div>';
+  if (destacar && !REDUCE_MOTION && l.length) {
+    var f = $('recent').querySelector('.row');
+    if (f) f.classList.add('row-new');
+  }
 }
-function pintarMovs(){
+function pintarMovs(destacar){
   var l = resumen.movimientos;
   $('allMovs').innerHTML = l.length ? l.map(filaMov).join('')
     : '<div class="empty">Sin movimientos en ' + MESES[mes-1] + '.</div>';
+  if (destacar && !REDUCE_MOTION && l.length) {
+    var f = $('allMovs').querySelector('.row');
+    if (f) f.classList.add('row-new');
+  }
 }
 
 document.addEventListener('click', function(ev){
@@ -585,26 +702,32 @@ document.addEventListener('click', function(ev){
   if (m) abrirMov(m);
 });
 
-function pintarAnillo(){
+function pintarAnillo(animar){
   var g = resumen.grupos.filter(function(x){ return x.real > 0; });
   var svg = $('ring'), leg = $('ringLegend');
+  svg.classList.remove('ring-anim');
   if (!g.length) {
     svg.innerHTML = '<circle cx="21" cy="21" r="15.9" fill="none" stroke="#F0EEE9" stroke-width="6"/>';
     leg.innerHTML = '<div class="leg" style="color:var(--muted)">Sin egresos este mes</div>';
     return;
   }
   var total = g.reduce(function(s,x){ return s + x.real; }, 0), off = 25, partes = '';
-  g.forEach(function(x){
+  g.forEach(function(x, i){
     var p = x.real / total * 100, t = tinte(x.grupo);
-    partes += '<circle cx="21" cy="21" r="15.9" fill="none" stroke="' + t[0] + '" stroke-width="6" ' +
+    partes += '<circle class="anillo-seg" style="animation-delay:' + (i * 50) + 'ms" ' +
+      'cx="21" cy="21" r="15.9" fill="none" stroke="' + t[0] + '" stroke-width="6" ' +
       'stroke-dasharray="' + p.toFixed(2) + ' ' + (100-p).toFixed(2) + '" ' +
       'stroke-dashoffset="' + off.toFixed(2) + '"></circle>';
     off = (off - p + 100) % 100;
   });
+  var txtDelay = g.length * 50;
   svg.innerHTML = partes +
-    '<text x="21" y="20.4" text-anchor="middle" font-size="4.4" font-weight="800" fill="#242A38">' +
+    '<text class="anillo-txt" style="animation-delay:' + txtDelay + 'ms" ' +
+      'x="21" y="20.4" text-anchor="middle" font-size="4.4" font-weight="800" fill="#242A38">' +
       corto(total) + '</text>' +
-    '<text x="21" y="25" text-anchor="middle" font-size="2.7" fill="#8B909E">gastado</text>';
+    '<text class="anillo-txt" style="animation-delay:' + txtDelay + 'ms" ' +
+      'x="21" y="25" text-anchor="middle" font-size="2.7" fill="#8B909E">gastado</text>';
+  if (animar && !REDUCE_MOTION) { void svg.getBoundingClientRect(); svg.classList.add('ring-anim'); }
   leg.innerHTML = g.map(function(x){
     var t = tinte(x.grupo);
     return '<div class="leg"><span class="swatch" style="background:' + t[0] +
@@ -649,6 +772,7 @@ function mostrarSkelAnual(){
 function asegurarAnual(){
   if (anualAnioMostrado === anio) return;
   anualAnioMostrado = anio;
+  anualPrimerPintado = true;
   var cache = leerCache(claveAnual(anio));
   if (cache) { pintarAnual(cache); } else { mostrarSkelAnual(); }
   sincronizarAnual(anio);
@@ -671,6 +795,8 @@ function invalidarAnual(a){
 
 function pintarAnual(datos){
   anual = datos;
+  var animar = anualPrimerPintado && !REDUCE_MOTION;
+  anualPrimerPintado = false;
   $('anualSkel').classList.add('hidden');
   var meses = datos.meses;
   var firstIdx = -1, lastIdx = -1;
@@ -709,8 +835,8 @@ function pintarAnual(datos){
     var areaPath = 'M ' + pts[0].x.toFixed(1) + ',' + yCero.toFixed(1) + ' L ' +
       pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' L ') +
       ' L ' + pts[pts.length-1].x.toFixed(1) + ',' + yCero.toFixed(1) + ' Z';
-    svg += '<path d="' + areaPath + '" style="fill:var(--accent);fill-opacity:.16;stroke:none"/>';
-    svg += '<path d="' + linePath + '" style="fill:none;stroke:var(--accent);stroke-width:2.2;' +
+    svg += '<path class="anual-reveal" d="' + areaPath + '" style="fill:var(--accent);fill-opacity:.16;stroke:none"/>';
+    svg += '<path class="anual-line" d="' + linePath + '" style="fill:none;stroke:var(--accent);stroke-width:2.2;' +
       'stroke-linecap:round;stroke-linejoin:round"/>';
   }
 
@@ -725,7 +851,7 @@ function pintarAnual(datos){
     return '<circle class="anual-hit" data-i="' + p.i + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="11"/>';
   }).join('');
   svg += pts.map(function(p){
-    return '<circle class="anual-point" data-i="' + p.i + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>';
+    return '<circle class="anual-point anual-reveal" data-i="' + p.i + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>';
   }).join('');
 
   var lp = pts[pts.length - 1];
@@ -733,13 +859,32 @@ function pintarAnual(datos){
   var ly = arriba ? lp.y - 9 : lp.y + 16;
   var anchor = lp.x > x1 - 30 ? 'end' : (lp.x < x0 + 30 ? 'start' : 'middle');
   var acumLp = meses[lp.i].acumulado;
-  svg += '<text x="' + lp.x.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor +
+  svg += '<text class="anual-reveal" x="' + lp.x.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor +
     '" font-size="12" font-weight="800" fill="' + (acumLp < 0 ? 'var(--neg)' : 'var(--ink)') + '">' +
     fmt(acumLp) + '</text>';
 
   $('anualSvg').innerHTML = svg;
   $('anualSvg').classList.remove('hidden');
   mostrarDetalleAnual(lp.i);
+  if (animar && pts.length > 1) dibujarLineaAnual($('anualSvg'));
+}
+
+/** Dibuja la linea de izquierda a derecha con stroke-dashoffset; el area, los
+ *  puntos y la etiqueta del ultimo valor aparecen despues. Solo se llama en
+ *  el primer pintado del anio (ver anualPrimerPintado). */
+function dibujarLineaAnual(svgEl){
+  var line = svgEl.querySelector('.anual-line');
+  var reveal = svgEl.querySelectorAll('.anual-reveal');
+  if (!line) return;
+  Array.prototype.forEach.call(reveal, function(el){ el.style.opacity = '0'; });
+  var len = line.getTotalLength();
+  line.style.strokeDasharray = len;
+  line.style.strokeDashoffset = len;
+  void line.getBoundingClientRect();
+  line.style.strokeDashoffset = '0';
+  setTimeout(function(){
+    Array.prototype.forEach.call(reveal, function(el){ el.style.opacity = '1'; });
+  }, 600);
 }
 
 function mostrarDetalleAnual(i){
@@ -763,12 +908,30 @@ document.addEventListener('click', function(ev){
 $('tabSimple').onclick = function(){ cambiarVista(true); };
 $('tabAdv').onclick = function(){ cambiarVista(false); };
 function cambiarVista(simple){
+  if (simple === vistaSimple) return;
+  var saliente = vistaSimple ? $('viewSimple') : $('viewAdv');
+  var entrante = simple ? $('viewSimple') : $('viewAdv');
   vistaSimple = simple;
   $('tabSimple').setAttribute('aria-selected', simple);
   $('tabAdv').setAttribute('aria-selected', !simple);
-  $('viewSimple').classList.toggle('hidden', !simple);
-  $('viewAdv').classList.toggle('hidden', simple);
   if (!simple) asegurarAnual();
+
+  if (REDUCE_MOTION) {
+    saliente.classList.add('hidden');
+    entrante.classList.remove('hidden');
+  } else {
+    saliente.classList.add('view-out');
+    entrante.classList.remove('hidden');
+    entrante.classList.add('view-in');
+    void entrante.offsetWidth;
+    entrante.classList.remove('view-in');
+    clearTimeout(saliente._viewT);
+    saliente._viewT = setTimeout(function(){
+      saliente.classList.add('hidden');
+      saliente.classList.remove('view-out');
+    }, 180);
+  }
+  if (simple) reproducirEntradaBarras();
 }
 
 // ══════════ HOJAS ══════════
@@ -872,6 +1035,7 @@ $('save').onclick = function(){
   }).then(function(){
     btn.textContent = 'Guardar';
     cerrarTodo(); toast('Movimiento guardado');
+    destacarPrimeraFila = true;
     var f = $('fDate').value.split('-');
     limpiarCacheMes(Number(f[0]), Number(f[1]));
     invalidarAnual(Number(f[0]));
