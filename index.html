@@ -383,7 +383,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 'use strict';
 
 // ══════════ ESTADO ══════════
-var URL_BASE = localStorage.getItem('fin.url') || '';
+var URL_BASE = localStorage.getItem('fin.url') || '';  // se normaliza mas abajo
 var TOKEN = localStorage.getItem('fin.token') || '';
 var URL_SUGERIDA = 'https://script.google.com/macros/s/AKfycbx4_P8l6aVYliYhDglpv3mY1dx_CiiQc7VkDk-T3LyV-dtchp2GMEmSKARNK4zUHApWPA/exec';
 
@@ -449,6 +449,24 @@ function leerCache(k){
 function limpiarCacheMes(a, m){ try { localStorage.removeItem(claveMes(a, m)); } catch(e){} }
 function limpiarCacheAnual(a){ try { localStorage.removeItem(claveAnual(a)); } catch(e){} }
 
+// ══════════ DIRECCION DEL SCRIPT ══════════
+/**
+ * Limpia la direccion antes de usarla. El caso frecuente es el segmento /u/1/
+ * que Google inserta al copiar la URL con varias cuentas abiertas: convierte la
+ * ruta en un archivo de Drive y Safari la rechaza como URL invalida.
+ */
+function normalizarUrl(u){
+  u = String(u || '').trim().replace(/\s+/g, '');
+  u = u.replace(/\/macros\/u\/\d+\//, '/macros/');   // quita /u/0/, /u/1/, etc.
+  u = u.split('?')[0].split('#')[0];                 // quita parametros pegados
+  u = u.replace(/\/+$/, '');                          // quita barras finales
+  return u;
+}
+
+function urlValida(u){
+  return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u);
+}
+
 // ══════════ COLA DE ENVIO ══════════
 // Los movimientos se guardan primero aqui y se muestran de inmediato.
 // El envio a la hoja ocurre despues, en segundo plano y con reintentos.
@@ -507,13 +525,18 @@ function enviar(cuerpo){
 }
 
 // ══════════ ARRANQUE ══════════
+// Repara en silencio una direccion guardada con formato incorrecto
+if (URL_BASE) {
+  var limpia = normalizarUrl(URL_BASE);
+  if (limpia !== URL_BASE) { URL_BASE = limpia; localStorage.setItem('fin.url', limpia); }
+}
 $('cfgUrl').value = URL_SUGERIDA;
 if (URL_BASE && TOKEN) { iniciar(); } else { $('setup').classList.remove('hidden'); }
 
 $('cfgSave').onclick = function(){
-  var u = $('cfgUrl').value.trim(), t = $('cfgToken').value.trim();
+  var u = normalizarUrl($('cfgUrl').value), t = $('cfgToken').value.trim();
   var e = $('setupErr');
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(u)) {
+  if (!urlValida(u)) {
     e.textContent = 'La dirección debe empezar con https://script.google.com/macros/s/ y terminar en /exec';
     e.classList.remove('hidden'); return;
   }
@@ -1146,8 +1169,14 @@ $('reload').onclick = function(){
 };
 $('openCfg').onclick = function(){ abrir('cfgSheet'); };
 $('cfgSave2').onclick = function(){
-  var u = $('cfgUrl2').value.trim(), t = $('cfgToken2').value.trim();
-  if (!u || !t) { toast('Faltan datos'); return; }
+  var u = normalizarUrl($('cfgUrl2').value), t = $('cfgToken2').value.trim();
+  if (!t) { toast('Falta la clave'); return; }
+  if (!urlValida(u)) {
+    toast('La direccion debe terminar en /exec');
+    $('cfgUrl2').value = u;
+    return;
+  }
+  $('cfgUrl2').value = u;
   URL_BASE = u; TOKEN = t;
   localStorage.setItem('fin.url', u); localStorage.setItem('fin.token', t);
   cerrarTodo(); toast('Guardado');
