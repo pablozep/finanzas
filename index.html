@@ -87,6 +87,16 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .track{display:block;height:5px;background:#F0EEE9;border-radius:99px;margin-top:5px;overflow:hidden}
 .track i{display:block;height:100%;border-radius:99px}
 
+/* ---------- tendencia anual ---------- */
+.anual-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 12px 12px;margin-bottom:8px}
+.anual-wrap svg{display:block;width:100%;height:auto}
+.anual-point{fill:var(--accent);stroke:var(--surface);stroke-width:1.5;transition:r .15s}
+.anual-point.active{r:5.5}
+.anual-hit{fill:transparent;cursor:pointer}
+.anual-detalle{text-align:center;font-size:13px;color:var(--muted);margin-top:6px}
+.anual-detalle b{color:var(--ink)}
+
 /* ---------- anillo ---------- */
 .ring-wrap{display:flex;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r);padding:16px}
@@ -233,6 +243,13 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
     </div>
 
     <div id="viewAdv" class="hidden">
+      <div class="section-title" style="margin-top:0">Tendencia anual</div>
+      <div class="anual-wrap" id="anualWrap">
+        <div class="skel" id="anualSkel" style="height:140px"></div>
+        <svg id="anualSvg" class="hidden" viewBox="0 0 300 130" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="empty hidden" id="anualEmpty" style="padding:20px">Todavía no hay datos este año.</div>
+        <div class="anual-detalle hidden" id="anualDetalle"></div>
+      </div>
       <div class="ring-wrap">
         <svg id="ring" width="118" height="118" viewBox="0 0 42 42" aria-hidden="true"></svg>
         <div class="ring-legend" id="ringLegend"></div>
@@ -316,6 +333,7 @@ var hoy = new Date();
 var anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
 var catalogo = null, resumen = null;
 var tipoSel = 'Egreso', catSel = null, digitos = '', movSel = null;
+var vistaSimple = true, anual = null, anualAnioMostrado = null;
 
 var MESES = ['enero','febrero','marzo','abril','mayo','junio',
              'julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -356,11 +374,13 @@ function esc(s){
 // Guarda la ultima respuesta buena de cada mes para poder pintar la pantalla
 // al instante mientras se pide la version fresca al servidor.
 function claveMes(a, m){ return 'fin.res.' + a + '-' + m; }
+function claveAnual(a){ return 'fin.anual.' + a; }
 function guardarCache(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 function leerCache(k){
   try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch(e){ return null; }
 }
 function limpiarCacheMes(a, m){ try { localStorage.removeItem(claveMes(a, m)); } catch(e){} }
+function limpiarCacheAnual(a){ try { localStorage.removeItem(claveAnual(a)); } catch(e){} }
 
 // ══════════ RED ══════════
 function pedir(params){
@@ -483,6 +503,7 @@ function cargarMes(){
     $('content').classList.add('hidden');
     $('loading').classList.remove('hidden');
   }
+  if (!vistaSimple) asegurarAnual();
   return sincronizar().catch(function(){});
 }
 
@@ -614,14 +635,140 @@ function pintarListaCat(){
   }).join('');
 }
 
+// ══════════ TENDENCIA ANUAL ══════════
+// Se pide solo la primera vez que se entra a Avanzada (o al cambiar de año
+// estando ahí), nunca en el arranque. Mismo patron stale-while-revalidate
+// que el resumen mensual, con su propia clave de cache por año.
+function mostrarSkelAnual(){
+  $('anualSkel').classList.remove('hidden');
+  $('anualSvg').classList.add('hidden');
+  $('anualEmpty').classList.add('hidden');
+  $('anualDetalle').classList.add('hidden');
+}
+
+function asegurarAnual(){
+  if (anualAnioMostrado === anio) return;
+  anualAnioMostrado = anio;
+  var cache = leerCache(claveAnual(anio));
+  if (cache) { pintarAnual(cache); } else { mostrarSkelAnual(); }
+  sincronizarAnual(anio);
+}
+
+function sincronizarAnual(a){
+  pedir({action:'anual', anio:a}).then(function(d){
+    guardarCache(claveAnual(a), d);
+    if (a === anio && !vistaSimple) pintarAnual(d);
+  }).catch(function(){ /* silencioso: se queda con lo que ya esta pintado */ });
+}
+
+function invalidarAnual(a){
+  limpiarCacheAnual(a);
+  if (anualAnioMostrado === a) {
+    anualAnioMostrado = null;
+    if (!vistaSimple) asegurarAnual();
+  }
+}
+
+function pintarAnual(datos){
+  anual = datos;
+  $('anualSkel').classList.add('hidden');
+  var meses = datos.meses;
+  var firstIdx = -1, lastIdx = -1;
+  for (var i = 0; i < meses.length; i++) {
+    if (meses[i].conDatos) { if (firstIdx < 0) firstIdx = i; lastIdx = i; }
+  }
+  if (lastIdx < 0) {
+    $('anualSvg').classList.add('hidden');
+    $('anualDetalle').classList.add('hidden');
+    $('anualEmpty').classList.remove('hidden');
+    return;
+  }
+  $('anualEmpty').classList.add('hidden');
+
+  var W = 300, H = 130, x0 = 10, x1 = W - 10, yTop = 18, yBot = H - 24;
+  function xAt(i){ return x0 + i / 11 * (x1 - x0); }
+
+  var vals = [];
+  for (i = firstIdx; i <= lastIdx; i++) vals.push(meses[i].acumulado);
+  var minV = Math.min(0, Math.min.apply(null, vals));
+  var maxV = Math.max(0, Math.max.apply(null, vals));
+  if (minV === maxV) { minV -= 1; maxV += 1; }
+  function yAt(v){ return yBot - (v - minV) / (maxV - minV) * (yBot - yTop); }
+  var yCero = yAt(0);
+
+  var pts = [];
+  for (i = firstIdx; i <= lastIdx; i++) {
+    pts.push({ i:i, x:xAt(i), y:yAt(meses[i].acumulado) });
+  }
+
+  var svg = '<line x1="' + x0 + '" y1="' + yCero.toFixed(1) + '" x2="' + x1 + '" y2="' + yCero.toFixed(1) +
+    '" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>';
+
+  if (pts.length > 1) {
+    var linePath = 'M ' + pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' L ');
+    var areaPath = 'M ' + pts[0].x.toFixed(1) + ',' + yCero.toFixed(1) + ' L ' +
+      pts.map(function(p){ return p.x.toFixed(1) + ',' + p.y.toFixed(1); }).join(' L ') +
+      ' L ' + pts[pts.length-1].x.toFixed(1) + ',' + yCero.toFixed(1) + ' Z';
+    svg += '<path d="' + areaPath + '" style="fill:var(--accent);fill-opacity:.16;stroke:none"/>';
+    svg += '<path d="' + linePath + '" style="fill:none;stroke:var(--accent);stroke-width:2.2;' +
+      'stroke-linecap:round;stroke-linejoin:round"/>';
+  }
+
+  svg += MESES.map(function(m, idx){
+    var dim = idx < firstIdx || idx > lastIdx;
+    return '<text x="' + xAt(idx).toFixed(1) + '" y="' + (yBot + 15) + '" text-anchor="middle" ' +
+      'font-size="9" fill="var(--muted)"' + (dim ? ' opacity=".35"' : '') + '>' +
+      m.charAt(0).toUpperCase() + '</text>';
+  }).join('');
+
+  svg += pts.map(function(p){
+    return '<circle class="anual-hit" data-i="' + p.i + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="11"/>';
+  }).join('');
+  svg += pts.map(function(p){
+    return '<circle class="anual-point" data-i="' + p.i + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>';
+  }).join('');
+
+  var lp = pts[pts.length - 1];
+  var arriba = lp.y - yTop > 14;
+  var ly = arriba ? lp.y - 9 : lp.y + 16;
+  var anchor = lp.x > x1 - 30 ? 'end' : (lp.x < x0 + 30 ? 'start' : 'middle');
+  var acumLp = meses[lp.i].acumulado;
+  svg += '<text x="' + lp.x.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor +
+    '" font-size="12" font-weight="800" fill="' + (acumLp < 0 ? 'var(--neg)' : 'var(--ink)') + '">' +
+    fmt(acumLp) + '</text>';
+
+  $('anualSvg').innerHTML = svg;
+  $('anualSvg').classList.remove('hidden');
+  mostrarDetalleAnual(lp.i);
+}
+
+function mostrarDetalleAnual(i){
+  var m = anual.meses[i];
+  var nombre = MESES[m.mes - 1];
+  $('anualDetalle').innerHTML = '<b>' + nombre.charAt(0).toUpperCase() + nombre.slice(1) + '</b> · ' +
+    fmt(m.acumulado) + ' acumulado';
+  $('anualDetalle').classList.remove('hidden');
+  Array.prototype.forEach.call($('anualSvg').querySelectorAll('.anual-point'), function(c){
+    c.classList.toggle('active', Number(c.dataset.i) === i);
+  });
+}
+
+document.addEventListener('click', function(ev){
+  var h = ev.target.closest('.anual-hit');
+  if (!h || !anual) return;
+  mostrarDetalleAnual(Number(h.dataset.i));
+});
+
 // ══════════ PESTAÑAS ══════════
 $('tabSimple').onclick = function(){ cambiarVista(true); };
 $('tabAdv').onclick = function(){ cambiarVista(false); };
 function cambiarVista(simple){
+  vistaSimple = simple;
   $('tabSimple').setAttribute('aria-selected', simple);
   $('tabAdv').setAttribute('aria-selected', !simple);
   $('viewSimple').classList.toggle('hidden', !simple);
   $('viewAdv').classList.toggle('hidden', simple);
+  if (!simple) asegurarAnual();
 }
 
 // ══════════ HOJAS ══════════
@@ -727,6 +874,7 @@ $('save').onclick = function(){
     cerrarTodo(); toast('Movimiento guardado');
     var f = $('fDate').value.split('-');
     limpiarCacheMes(Number(f[0]), Number(f[1]));
+    invalidarAnual(Number(f[0]));
     anio = Number(f[0]); mes = Number(f[1]);
     $('mLabel').textContent = etiquetaMes();
     sincronizar().catch(function(){});
@@ -763,6 +911,7 @@ $('movDelete').onclick = function(){
   enviar({action:'eliminar', id: movSel.id, anio: anio}).then(function(){
     cerrarTodo(); toast('Movimiento eliminado');
     limpiarCacheMes(anio, mes);
+    invalidarAnual(anio);
     sincronizar().catch(function(){});
   }).catch(function(e){
     b.disabled = false; b.textContent = 'Eliminar movimiento'; toast('Error: ' + e.message);
