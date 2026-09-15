@@ -206,6 +206,14 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .empty{text-align:center;color:var(--muted);font-size:14px;padding:34px 20px;line-height:1.6}
 .err{background:#FCEAEA;color:#9B2C2C;border-radius:13px;padding:12px 14px;font-size:13.5px;
   font-weight:600;margin-bottom:14px}
+.row.pend .avatar{opacity:.5}
+.row.pend .name{opacity:.75}
+.chip-pend{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;
+  color:#8A6300;background:#FFF3D4;border-radius:99px;padding:1px 7px;vertical-align:1px}
+.banda{display:flex;align-items:center;gap:10px;background:#FFF3D4;color:#7A5800;
+  border-radius:13px;padding:10px 13px;font-size:13px;font-weight:700;margin-bottom:14px}
+.banda b{margin-left:auto;text-decoration:underline;white-space:nowrap}
+.banda.malo{background:#FCEAEA;color:#9B2C2C}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;background:var(--ink);color:#fff;
   padding:11px 20px;border-radius:999px;font-weight:700;font-size:14px;z-index:90;
   opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
@@ -267,6 +275,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
     </div>
   </div>
 
+  <div id="banda" class="banda hidden"><span id="bandaTxt"></span><b id="bandaBtn">Reintentar</b></div>
   <div id="err" class="err hidden"></div>
   <div id="loading">
     <div class="skel" style="height:26px;width:60%;margin:0 auto 14px"></div>
@@ -380,7 +389,8 @@ var URL_SUGERIDA = 'https://script.google.com/macros/s/AKfycbx4_P8l6aVYliYhDglpv
 
 var hoy = new Date();
 var anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
-var catalogo = null, resumen = null;
+var catalogo = null, resumen = null, resumenServidor = null;
+var procesandoCola = false;
 var tipoSel = 'Egreso', catSel = null, digitos = '', movSel = null;
 var vistaSimple = true, anual = null, anualAnioMostrado = null;
 
@@ -439,6 +449,30 @@ function leerCache(k){
 function limpiarCacheMes(a, m){ try { localStorage.removeItem(claveMes(a, m)); } catch(e){} }
 function limpiarCacheAnual(a){ try { localStorage.removeItem(claveAnual(a)); } catch(e){} }
 
+// ══════════ COLA DE ENVIO ══════════
+// Los movimientos se guardan primero aqui y se muestran de inmediato.
+// El envio a la hoja ocurre despues, en segundo plano y con reintentos.
+function leerCola(){
+  try { return JSON.parse(localStorage.getItem('fin.cola') || '[]'); } catch(e){ return []; }
+}
+function guardarCola(c){
+  try { localStorage.setItem('fin.cola', JSON.stringify(c)); } catch(e){}
+}
+function nuevoUid(){
+  return 'TMP-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+/** Traduce el error tecnico a algo accionable. */
+function mensajeError(e){
+  var m = String((e && e.message) || e || '');
+  if (m.indexOf('Token') >= 0) return 'La clave no coincide con la del script. Revisala en Ajustes.';
+  if (/abort|timeout|tardo/i.test(m)) return 'El servidor tardo demasiado en responder.';
+  if (/did not match|Invalid URL/i.test(m)) return 'La direccion del script parece mal escrita.';
+  if (/Load failed|network|conexion/i.test(m)) return 'Sin conexion con el servidor.';
+  if (/JSON|Unexpected|Unrecognized/i.test(m)) return 'El servidor respondio algo inesperado.';
+  return m;
+}
+
 // ══════════ RED ══════════
 function pedir(params){
   var q = Object.keys(params).map(function(k){
@@ -452,12 +486,24 @@ function pedir(params){
 }
 function enviar(cuerpo){
   cuerpo.token = TOKEN;
-  return fetch(URL_BASE, {
+  // Corte a los 30 s: sin esto una peticion colgada deja la app esperando
+  // indefinidamente. El uid del cuerpo evita que un reintento duplique la fila.
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var corte = ctrl ? setTimeout(function(){ ctrl.abort(); }, 30000) : null;
+  var opciones = {
     method: 'POST',
     headers: {'Content-Type':'text/plain;charset=utf-8'},  // evita el preflight CORS
     body: JSON.stringify(cuerpo)
-  }).then(function(r){ return r.json(); })
-    .then(function(j){ if (!j.ok) throw new Error(j.error); return j.datos; });
+  };
+  if (ctrl) opciones.signal = ctrl.signal;
+  return fetch(URL_BASE, opciones)
+    .then(function(r){ if (corte) clearTimeout(corte); return r.json(); })
+    .then(function(j){ if (!j.ok) throw new Error(j.error); return j.datos; })
+    .catch(function(e){
+      if (corte) clearTimeout(corte);
+      if (e && e.name === 'AbortError') throw new Error('El servidor tardo demasiado');
+      throw e;
+    });
 }
 
 // ══════════ ARRANQUE ══════════
@@ -491,9 +537,10 @@ function iniciar(){
   var cat = leerCache('fin.cat');
   if (cat) { aplicarCatalogo(cat); }
   var res = leerCache(claveMes(anio, mes));
-  if (res) { resumen = res; mostrarContenido(); }
+  if (res) { resumenServidor = res; aplicarCola(); mostrarContenido(); }
 
-  sincronizar();
+  pintarBanda();
+  sincronizar().then(function(){ procesarCola(); }).catch(function(){ procesarCola(); });
 }
 
 // Linea divisoria del topbar: aparece solo cuando el contenido ya paso por debajo.
@@ -509,6 +556,83 @@ function iniciar(){
     });
   }, {passive:true});
 })();
+
+/**
+ * Reconstruye `resumen` a partir de lo que dijo el servidor mas los movimientos
+ * que siguen en la cola. Asi los totales y las barras ya reflejan lo recien
+ * ingresado aunque todavia no haya llegado a la hoja.
+ */
+function aplicarCola(){
+  if (!resumenServidor) return false;
+  var r = JSON.parse(JSON.stringify(resumenServidor));
+  var pend = leerCola().filter(function(x){ return x.anio === anio && x.mes === mes; });
+
+  pend.forEach(function(p){
+    var info = (catalogo && catalogo.categorias.filter(function(x){
+      return x.categoria === p.categoria; })[0]) || {};
+
+    r.movimientos.unshift({
+      id: p.uid, fecha: p.fecha, anio: p.anio, mes: p.mes, tipo: p.tipo,
+      categoria: p.categoria, monto: p.monto, descripcion: p.descripcion,
+      medio: p.medio, pendiente: true, bloqueado: !!p.bloqueado
+    });
+
+    var bloque = (p.tipo === 'Ingreso') ? r.ingresos : r.egresos;
+    bloque.real += p.monto;
+    bloque.diferencia = bloque.real - bloque.ppto;
+
+    var cat = r.categorias.filter(function(c){ return c.categoria === p.categoria; })[0];
+    if (cat) {
+      cat.real += p.monto;
+      cat.diferencia = cat.real - cat.ppto;
+      cat.avance = cat.ppto > 0 ? cat.real / cat.ppto : null;
+    } else {
+      r.categorias.push({
+        categoria: p.categoria, tipo: p.tipo, grupo: info.grupo || '',
+        emoji: info.emoji || '', real: p.monto, ppto: 0,
+        diferencia: p.monto, avance: null
+      });
+    }
+
+    if (p.tipo === 'Egreso' && info.grupo) {
+      var g = r.grupos.filter(function(x){ return x.grupo === info.grupo; })[0];
+      if (g) { g.real += p.monto; g.diferencia = g.real - g.ppto; }
+      else r.grupos.push({ grupo: info.grupo, real: p.monto, ppto: 0,
+                           diferencia: p.monto, porcentaje: 0 });
+    }
+  });
+
+  r.saldo.real = r.ingresos.real - r.egresos.real;
+  r.tasaAhorro = r.ingresos.real > 0 ? r.saldo.real / r.ingresos.real : 0;
+  r.grupos.forEach(function(g){
+    g.porcentaje = r.egresos.real > 0 ? g.real / r.egresos.real : 0;
+  });
+  r.grupos.sort(function(a,b){ return b.real - a.real; });
+  r.categorias.sort(function(a,b){ return b.real - a.real; });
+
+  resumen = r;
+  return true;
+}
+
+/** Vuelve a fusionar y pintar. Se usa tras cualquier cambio en la cola. */
+function repintar(){
+  pintarBanda();
+  if (aplicarCola()) mostrarContenido();
+}
+
+function pintarBanda(){
+  var cola = leerCola();
+  var b = $('banda');
+  if (!cola.length) { b.classList.add('hidden'); return; }
+  var fallidos = cola.filter(function(x){ return x.bloqueado; }).length;
+  var n = cola.length;
+  b.classList.toggle('malo', fallidos > 0);
+  $('bandaTxt').textContent = fallidos
+    ? (fallidos === 1 ? '1 movimiento no se pudo guardar' : fallidos + ' movimientos no se pudieron guardar')
+    : (n === 1 ? '1 movimiento por sincronizar' : n + ' movimientos por sincronizar');
+  $('bandaBtn').textContent = fallidos ? 'Ver' : 'Reintentar';
+  b.classList.remove('hidden');
+}
 
 function mostrarContenido(){
   $('loading').classList.add('hidden');
@@ -528,7 +652,8 @@ function sincronizar(opciones){
   return pedir(params).then(function(d){
     aplicarCatalogo(d.catalogo);
     guardarCache('fin.cat', d.catalogo);
-    resumen = d.resumen;
+    resumenServidor = d.resumen;
+    aplicarCola();
     guardarCache(claveMes(anio, mes), d.resumen);
     mostrarContenido();
     ocupado(false);
@@ -557,6 +682,71 @@ function aplicarCatalogo(d){
   pintarCategorias();
 }
 
+/**
+ * Envia los pendientes de a uno, en orden. Si falla, el movimiento se queda en
+ * la cola y se reintenta la proxima vez (al abrir la app, al tocar ↻, al volver
+ * la conexion). El uid hace que un reintento no duplique nada.
+ */
+function procesarCola(){
+  if (procesandoCola) return Promise.resolve();
+  var cola = leerCola();
+  var item = cola.filter(function(x){ return !x.bloqueado; })[0];
+  if (!item) { pintarBanda(); return Promise.resolve(); }
+
+  procesandoCola = true;
+  ocupado(true);
+
+  return enviar({
+    action: 'crear', uid: item.uid, tipo: item.tipo, categoria: item.categoria,
+    monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
+    medio: item.medio, origen: item.origen
+  }).then(function(){
+    procesandoCola = false;
+    var resto = leerCola().filter(function(x){ return x.uid !== item.uid; });
+    guardarCola(resto);
+    limpiarCacheMes(item.anio, item.mes);
+    limpiarCacheAnual(item.anio);
+    if (resto.filter(function(x){ return !x.bloqueado; }).length) return procesarCola();
+    ocupado(false);
+    return sincronizar().catch(function(){});
+  }).catch(function(e){
+    procesandoCola = false;
+    ocupado(false);
+    var msg = String((e && e.message) || '');
+    var cola2 = leerCola();
+    var it = cola2.filter(function(x){ return x.uid === item.uid; })[0];
+    if (it) {
+      it.intentos = (it.intentos || 0) + 1;
+      it.error = mensajeError(e);
+      // Si el rechazo es por datos invalidos, reintentar no sirve de nada.
+      if (/categor|monto|tipo|Token/i.test(msg)) it.bloqueado = true;
+      guardarCola(cola2);
+    }
+    repintar();
+  });
+}
+
+$('bandaBtn').onclick = function(){
+  var cola = leerCola();
+  var malos = cola.filter(function(x){ return x.bloqueado; });
+  if (malos.length) {
+    if (confirm(malos.length + ' movimiento(s) no se pudieron guardar:\n\n' +
+        malos.map(function(x){ return '• ' + x.categoria + ' ' + fmt(x.monto) + ' — ' + (x.error||''); }).join('\n') +
+        '\n\n¿Descartarlos?')) {
+      guardarCola(cola.filter(function(x){ return !x.bloqueado; }));
+      repintar();
+    }
+    return;
+  }
+  procesarCola();
+};
+
+// Reintenta al volver a la app o al recuperar conexion
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden) procesarCola();
+});
+window.addEventListener('online', function(){ procesarCola(); });
+
 // ══════════ MES ══════════
 function etiquetaMes(){
   var m = MESES[mes-1];
@@ -575,7 +765,8 @@ function cargarMes(){
   $('mLabel').textContent = etiquetaMes();
   var res = leerCache(claveMes(anio, mes));
   if (res) {
-    resumen = res;
+    resumenServidor = res;
+    aplicarCola();
     mostrarContenido();
   } else {
     $('content').classList.add('hidden');
@@ -668,9 +859,12 @@ function filaMov(m){
   var t = tinte(c.grupo);
   var d = m.fecha.split('-');
   var sub = d[2] + ' ' + MESES[Number(d[1])-1].slice(0,3) + (m.descripcion ? ' · ' + m.descripcion : '');
-  return '<button class="row" data-id="' + esc(m.id) + '" style="width:100%;text-align:left">' +
+  var chip = m.pendiente
+    ? '<span class="chip-pend">' + (m.bloqueado ? 'sin guardar' : 'enviando') + '</span>' : '';
+  return '<button class="row' + (m.pendiente ? ' pend' : '') + '" data-id="' + esc(m.id) +
+    '" style="width:100%;text-align:left">' +
     '<span class="avatar" style="background:' + t[0] + '">' + esc(c.emoji || '•') + '</span>' +
-    '<span class="body"><span class="name">' + esc(m.categoria) + '</span>' +
+    '<span class="body"><span class="name">' + esc(m.categoria) + chip + '</span>' +
     '<span class="sub">' + esc(sub) + '</span></span>' +
     '<span class="amt ' + (m.tipo === 'Ingreso' ? 'in' : '') + '">' +
       (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto) + '</span></button>';
@@ -946,7 +1140,10 @@ $('cfgClose').onclick = cerrarTodo;
 $('movClose').onclick = cerrarTodo;
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarTodo(); });
 
-$('reload').onclick = function(){ sincronizar().catch(function(){}); };
+$('reload').onclick = function(){
+  if (leerCola().length) procesarCola();
+  else sincronizar().catch(function(){});
+};
 $('openCfg').onclick = function(){ abrir('cfgSheet'); };
 $('cfgSave2').onclick = function(){
   var u = $('cfgUrl2').value.trim(), t = $('cfgToken2').value.trim();
@@ -1020,32 +1217,32 @@ function refrescarEntrada(){
 }
 
 $('save').onclick = function(){
-  var btn = $('save');
-  btn.disabled = true; btn.textContent = 'Guardando…';
-  $('addErr').classList.add('hidden');
-  enviar({
-    action: 'crear',
-    tipo: tipoSel,
-    categoria: catSel,
-    monto: Number(digitos),
-    fecha: $('fDate').value,
-    descripcion: $('fDesc').value.trim(),
-    medio: $('fMedio').value,
-    origen: 'App'
-  }).then(function(){
-    btn.textContent = 'Guardar';
-    cerrarTodo(); toast('Movimiento guardado');
-    destacarPrimeraFila = true;
-    var f = $('fDate').value.split('-');
-    limpiarCacheMes(Number(f[0]), Number(f[1]));
-    invalidarAnual(Number(f[0]));
-    anio = Number(f[0]); mes = Number(f[1]);
-    $('mLabel').textContent = etiquetaMes();
-    sincronizar().catch(function(){});
-  }).catch(function(e){
-    btn.textContent = 'Guardar'; btn.disabled = false;
-    var a = $('addErr'); a.textContent = e.message; a.classList.remove('hidden');
-  });
+  // Guardado optimista: el movimiento entra a la cola local y se muestra al
+  // instante. El envio a la hoja corre despues, sin bloquear la interfaz.
+  var fechaEnv = $('fDate').value || iso(new Date());
+  var f = fechaEnv.split('-');
+  var a = Number(f[0]), m = Number(f[1]);
+  if (!a || !m) { fechaEnv = iso(new Date()); f = fechaEnv.split('-'); a = Number(f[0]); m = Number(f[1]); }
+
+  var item = {
+    uid: nuevoUid(),
+    tipo: tipoSel, categoria: catSel, monto: Number(digitos),
+    fecha: fechaEnv, descripcion: $('fDesc').value.trim(),
+    medio: $('fMedio').value, origen: 'App',
+    anio: a, mes: m, intentos: 0
+  };
+
+  var cola = leerCola(); cola.push(item); guardarCola(cola);
+
+  cerrarTodo();
+  toast('Guardado');
+  destacarPrimeraFila = true;
+  anio = a; mes = m;
+  $('mLabel').textContent = etiquetaMes();
+  limpiarCacheMes(a, m);
+  limpiarCacheAnual(a);
+  repintar();
+  procesarCola();
 };
 
 // ══════════ DETALLE / ELIMINAR ══════════
@@ -1072,6 +1269,13 @@ $('movDelete').onclick = function(){
     return;
   }
   b.dataset.armed = ''; b.disabled = true; b.textContent = 'Eliminando…';
+  if (movSel && movSel.pendiente) {
+    guardarCola(leerCola().filter(function(x){ return x.uid !== movSel.id; }));
+    cerrarTodo(); toast('Movimiento descartado');
+    b.disabled = false; b.textContent = 'Eliminar movimiento';
+    repintar();
+    return;
+  }
   enviar({action:'eliminar', id: movSel.id, anio: anio}).then(function(){
     cerrarTodo(); toast('Movimiento eliminado');
     limpiarCacheMes(anio, mes);
