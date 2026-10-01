@@ -48,7 +48,12 @@ También: `Categorias`, `Presupuesto`, `Config`, `Resumen_Mensual`, `Resumen_Anu
 
 ## Regla de saldos
 
-Saldo esperado = saldo inicial + movimientos con `fecha >= fecha del saldo`:
+Saldo esperado = saldo inicial + movimientos con `fecha > fecha del saldo`.
+
+El saldo inicial es el saldo **al cierre** de su fecha: los movimientos de ese
+mismo día ya están incluidos en el número anotado y no se vuelven a contar.
+(Antes la regla era `>=`, "saldo al inicio del día", y producía doble conteo
+cuando el usuario anotaba el saldo y la fecha de hoy, que es lo natural.)
 
 - **Ingreso**: suma a `Cuenta`.
 - **Egreso**: resta de `Cuenta`; si tiene destino, suma al destino.
@@ -140,8 +145,8 @@ Todas las peticiones llevan `token`. Respuestas: `{ok: true, datos}` o
 ## Rotación anual
 
 `crearArchivoDelAnio()` duplica el archivo, vacía Movimientos y **escribe los
-saldos de cierre como saldo inicial al 1 de enero** en la hoja Cuentas del año
-nuevo. Sin eso, en enero todas las cuentas volverían a cero.
+saldos de cierre como saldo inicial con fecha 31 de diciembre** en la hoja
+Cuentas del año nuevo. Sin eso, en enero todas las cuentas volverían a cero.
 
 ## Lenguaje visual
 

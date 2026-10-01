@@ -789,7 +789,7 @@ function efectoEnCuentas(cs, mv, signo){
   function aplicar(nombre, delta){
     var c = cs.lista.filter(function(x){ return x.cuenta === nombre; })[0];
     if (!c) return;
-    if (c.fechaSaldo && mv.fecha && mv.fecha < c.fechaSaldo) return;
+    if (c.fechaSaldo && mv.fecha && mv.fecha <= c.fechaSaldo) return;   // ya incluido en el saldo al cierre
     c.saldo += delta;
   }
   if (mv.tipo === 'Ingreso') {
@@ -1259,7 +1259,7 @@ function abrirCuenta(nombre){
     var fs = c.fechaSaldo ? c.fechaSaldo.split('-') : null;
     html += '<div class="row"><span class="avatar" style="background:#F1EFEB">⚑</span>' +
       '<span class="body"><span class="name">Saldo inicial</span>' +
-      '<span class="sub">' + (fs ? esc(fs[2] + ' ' + MESES[Number(fs[1])-1].slice(0,3) + ' ' + fs[0]) : 'sin fecha') +
+      '<span class="sub">' + (fs ? 'al cierre del ' + esc(fs[2] + ' ' + MESES[Number(fs[1])-1].slice(0,3) + ' ' + fs[0]) : 'sin fecha') +
       '</span></span><span class="amt tr">' + fmtS(c.saldoInicial) + '</span></div>';
   }
   $('ctaMovs').innerHTML = html ||
