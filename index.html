@@ -239,6 +239,15 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
 .concil-dif.mal{background:#FCEAEA;color:#9B2C2C}
 .aviso{background:#FFF3D4;color:#7A5800;border-radius:13px;padding:11px 13px;font-size:13px;
   font-weight:600;line-height:1.5;margin-bottom:10px}
+details.aviso{padding:0;overflow:hidden}
+details.aviso > summary{list-style:none;cursor:pointer;padding:11px 13px;display:flex;gap:10px;align-items:flex-start}
+details.aviso > summary::-webkit-details-marker{display:none}
+details.aviso > summary .flecha{margin-left:auto;font-weight:800;transition:transform .2s;flex:none}
+details.aviso[open] > summary .flecha{transform:rotate(180deg)}
+details.aviso .lista-sc{background:var(--surface);margin:0 8px 8px;border-radius:11px;overflow:hidden}
+details.aviso .lista-sc .row{border-bottom:1px solid var(--line)}
+details.aviso .lista-sc .row:last-child{border-bottom:0}
+details.aviso .pista{font-size:12px;font-weight:600;padding:0 13px 10px;opacity:.85}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;background:var(--ink);color:#fff;
   padding:11px 20px;border-radius:999px;font-weight:700;font-size:14px;z-index:90;
   opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
@@ -411,6 +420,16 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   <div id="movBody" style="font-size:14.5px;color:var(--muted);line-height:1.9;margin-bottom:16px"></div>
   <button class="btn danger" id="movDelete">Eliminar movimiento</button>
   <button class="btn ghost" id="movClose">Cerrar</button>
+</div>
+
+<!-- ══════════ HOJA: ASIGNAR CUENTA ══════════ -->
+<div class="sheet" id="asigSheet">
+  <div class="grabber"></div>
+  <h2 id="asigTitle">¿De qué cuenta salió?</h2>
+  <div id="asigBody" style="font-size:14.5px;color:var(--muted);line-height:1.8;margin-bottom:14px"></div>
+  <div class="ctas" id="asigCtas" style="flex-wrap:wrap;overflow:visible"></div>
+  <div style="height:6px"></div>
+  <button class="btn ghost" id="asigClose">Cancelar</button>
 </div>
 
 <!-- ══════════ HOJA: CONCILIAR CUENTA ══════════ -->
@@ -687,7 +706,7 @@ function aplicarCola(){
     }
   });
 
-  pend.filter(function(p){ return p.op !== 'eliminar'; }).forEach(function(p){
+  pend.filter(function(p){ return !p.op; }).forEach(function(p){
     var info = (catalogo && catalogo.categorias.filter(function(x){
       return x.categoria === p.categoria; })[0]) || {};
 
@@ -726,9 +745,21 @@ function aplicarCola(){
 
   // Los saldos de cuentas son globales: todo lo pendiente cuenta, sea del mes que sea
   if (r.cuentas && r.cuentas.lista) {
+    var sc = r.cuentas.sinCuenta;
     leerCola().forEach(function(p){
-      if (p.op === 'eliminar') efectoEnCuentas(r.cuentas, p.mov, -1);
-      else efectoEnCuentas(r.cuentas, p, +1);
+      if (p.op === 'eliminar') { efectoEnCuentas(r.cuentas, p.mov, -1); return; }
+      if (p.op === 'asignar') {
+        var enLista = sc && sc.lista && sc.lista.filter(function(x){ return x.id === p.mov.id; })[0];
+        if (!enLista) return;                       // el servidor ya la tiene asignada
+        efectoEnCuentas(r.cuentas, movDeItem(p), +1);
+        sc.lista = sc.lista.filter(function(x){ return x.id !== p.mov.id; });
+        sc.n -= 1;
+        sc.monto -= p.mov.monto;
+        var fila = r.movimientos.filter(function(x){ return x.id === p.mov.id; })[0];
+        if (fila) fila.cuenta = p.cuenta;
+        return;
+      }
+      efectoEnCuentas(r.cuentas, p, +1);
     });
     var disp = 0, inv = 0;
     r.cuentas.lista.forEach(function(c){ if (c.disponible) disp += c.saldo; else inv += c.saldo; });
@@ -767,6 +798,16 @@ function efectoEnCuentas(cs, mv, signo){
     if (mv.cuenta) aplicar(mv.cuenta, -signo * mv.monto);
     if (mv.cuentaDestino) aplicar(mv.cuentaDestino, signo * mv.monto);
   }
+}
+
+/** Cualquier item de la cola, visto como movimiento (para saldos y listas). */
+function movDeItem(p){
+  if (p.op === 'eliminar') return p.mov;
+  if (p.op === 'asignar') {
+    return { id: p.mov.id, tipo: p.mov.tipo, categoria: p.mov.categoria, monto: p.mov.monto,
+             fecha: p.mov.fecha, descripcion: p.mov.descripcion, cuenta: p.cuenta, cuentaDestino: '' };
+  }
+  return p;
 }
 
 /** Vuelve a fusionar y pintar. Se usa tras cualquier cambio en la cola. */
@@ -851,6 +892,8 @@ function procesarCola(){
 
   var cuerpo = (item.op === 'eliminar')
     ? { action: 'eliminar', uid: item.uid, id: item.mov.id, anio: item.anio }
+    : (item.op === 'asignar')
+    ? { action: 'editar', uid: item.uid, id: item.mov.id, anio: item.anio, cuenta: item.cuenta }
     : { action: 'crear', uid: item.uid, tipo: item.tipo, categoria: item.categoria,
         monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
         medio: item.medio || '', origen: item.origen,
@@ -901,7 +944,8 @@ $('bandaBtn').onclick = function(){
   var malos = cola.filter(function(x){ return x.bloqueado; });
   if (malos.length) {
     if (confirm(malos.length + ' movimiento(s) no se pudieron guardar:\n\n' +
-        malos.map(function(x){ return '• ' + x.categoria + ' ' + fmt(x.monto) + ' — ' + (x.error||''); }).join('\n') +
+        malos.map(function(x){ var m = movDeItem(x);
+          return '• ' + (m.categoria || 'Transferencia') + ' ' + fmt(m.monto) + ' — ' + (x.error||''); }).join('\n') +
         '\n\n¿Descartarlos?')) {
       guardarCola(cola.filter(function(x){ return !x.bloqueado; }));
       repintar();
@@ -1106,6 +1150,11 @@ function chequeoHoy(nombre, saldo){
   return '<span class="chk mal">' + (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + '</span>';
 }
 
+var sinCuentaAbierto = false;
+document.addEventListener('toggle', function(ev){
+  if (ev.target && ev.target.id === 'scDet') sinCuentaAbierto = ev.target.open;
+}, true);
+
 function pintarCuentasAdv(){
   var box = $('cuentasBox');
   if (!box || !resumen) return;
@@ -1123,9 +1172,25 @@ function pintarCuentasAdv(){
   html += '<div class="cuenta-tot"><div><small>Disponible</small><b>' + fmtS(cs.totalDisponible) + '</b></div>' +
     (hayInv ? '<div><small>Invertido</small><b>' + fmtS(cs.totalInvertido) + '</b></div>' : '') + '</div>';
   if (cs.sinCuenta && cs.sinCuenta.n) {
-    html += '<div class="aviso">' + cs.sinCuenta.n +
-      (cs.sinCuenta.n === 1 ? ' movimiento' : ' movimientos') + ' sin cuenta asignada, por ' +
-      fmt(cs.sinCuenta.monto) + '. No suman ni restan en ninguna cuenta.</div>';
+    var sc = cs.sinCuenta;
+    var filas = (sc.lista || []).map(function(m){
+      var info = infoCategoria(m.categoria) || {};
+      var t = tinte(info.grupo);
+      var d = m.fecha.split('-');
+      var sub = d[2] + ' ' + MESES[Number(d[1])-1].slice(0,3) + (m.descripcion ? ' · ' + m.descripcion : '');
+      return '<button class="row" data-asignar="' + esc(m.id) + '" style="width:100%;text-align:left">' +
+        '<span class="avatar" style="background:' + t[0] + '">' + esc(info.emoji || '•') + '</span>' +
+        '<span class="body"><span class="name">' + esc(m.categoria) + '</span>' +
+        '<span class="sub">' + esc(sub) + '</span></span>' +
+        '<span class="amt' + (m.tipo === 'Ingreso' ? ' in' : '') + '">' +
+          (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto) + '</span></button>';
+    }).join('');
+    html += '<details class="aviso" id="scDet"' + (sinCuentaAbierto ? ' open' : '') + '>' +
+      '<summary><span>' + sc.n + (sc.n === 1 ? ' movimiento' : ' movimientos') +
+        ' sin cuenta asignada, por ' + fmt(sc.monto) + '. No suman ni restan en ninguna cuenta.</span>' +
+        '<span class="flecha">⌄</span></summary>' +
+      '<div class="pista">Toca uno para asignarle su cuenta.</div>' +
+      '<div class="lista-sc">' + filas + '</div></details>';
   }
   html += '<div class="card">' + cs.lista.map(function(c){
     var sub = c.tipo + (c.disponible ? '' : ' · fuera del disponible') +
@@ -1172,8 +1237,9 @@ function abrirCuenta(nombre){
   var eliminando = cola.filter(function(p){ return p.op === 'eliminar'; })
     .map(function(p){ return p.mov.id; });
   var pend = [];
-  cola.forEach(function(p){
-    if (p.op === 'eliminar') return;
+  cola.forEach(function(p0){
+    if (p0.op === 'eliminar') return;
+    var p = movDeItem(p0);
     if (p.tipo === 'Ingreso' && p.cuenta === c.cuenta) {
       pend.push({ fecha: p.fecha, tipo: p.tipo, categoria: p.categoria, monto: p.monto,
                   signo: 1, descripcion: p.descripcion, contraparte: '', pendiente: true });
@@ -1232,6 +1298,51 @@ document.addEventListener('click', function(ev){
   var b = ev.target.closest('.row[data-cta]');
   if (b) abrirCuenta(b.dataset.cta);
 });
+
+// ══════════ ASIGNAR CUENTA A UN MOVIMIENTO ══════════
+var movAsignar = null;
+
+function abrirAsignar(m){
+  movAsignar = m;
+  var d = m.fecha.split('-');
+  $('asigTitle').textContent = m.tipo === 'Ingreso' ? '¿A qué cuenta llegó?' : '¿De qué cuenta salió?';
+  $('asigBody').innerHTML =
+    '<div><b style="color:var(--ink)">' + esc(m.categoria) + ' · ' +
+      (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto) + '</b></div>' +
+    '<div>' + d[2] + ' de ' + MESES[Number(d[1])-1] + ' de ' + d[0] +
+      (m.descripcion ? ' · ' + esc(m.descripcion) : '') + '</div>';
+  $('asigCtas').innerHTML = cuentasCat().map(function(c){ return chipCuenta(c, false, 'a'); }).join('');
+  abrir('asigSheet');
+}
+
+document.addEventListener('click', function(ev){
+  var b = ev.target.closest('.row[data-asignar]');
+  if (!b) return;
+  var sc = resumen && resumen.cuentas && resumen.cuentas.sinCuenta;
+  var m = sc && (sc.lista || []).filter(function(x){ return x.id === b.dataset.asignar; })[0];
+  if (m) abrirAsignar(m);
+});
+
+$('asigCtas').addEventListener('click', function(ev){
+  var b = ev.target.closest('.cta');
+  if (!b || !movAsignar) return;
+  var m = movAsignar, cuenta = b.dataset.cuenta;
+  var cola = leerCola();
+  cola.push({
+    uid: nuevoUid(), op: 'asignar', anio: m.anio, mes: m.mes, intentos: 0,
+    mov: { id: m.id, tipo: m.tipo, categoria: m.categoria, monto: m.monto,
+           fecha: m.fecha, descripcion: m.descripcion },
+    cuenta: cuenta
+  });
+  guardarCola(cola);
+  movAsignar = null;
+  cerrarTodo();
+  toast('Asignado a ' + cuenta);
+  limpiarCacheMes(m.anio, m.mes);
+  repintar();
+  procesarCola();
+});
+$('asigClose').onclick = function(){ cerrarTodo(); };
 
 function pintarRecientes(destacar){
   var l = resumen.movimientos.slice(0,6);
@@ -1495,7 +1606,7 @@ function cambiarVista(simple){
 function abrir(id){ $('scrim').classList.add('on'); $(id).classList.add('on'); }
 function cerrarTodo(){
   $('scrim').classList.remove('on');
-  ['addSheet','cfgSheet','movSheet','ctaSheet'].forEach(function(i){ $(i).classList.remove('on'); });
+  ['addSheet','cfgSheet','movSheet','ctaSheet','asigSheet'].forEach(function(i){ $(i).classList.remove('on'); });
   if (resumen) pintarCuentasAdv();
 }
 $('scrim').onclick = cerrarTodo;

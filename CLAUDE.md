@@ -100,6 +100,9 @@ Crear y eliminar **no esperan al servidor**. El movimiento entra a
   respuesta, para no hacer una segunda petición.
 - Reintentos: al abrir la app, al tocar ↻, al volver a primer plano, al
   recuperar conexión y cada 20 s mientras haya pendientes.
+- Tipos de ítem: alta (sin `op`), `op: 'eliminar'` y `op: 'asignar'` (pone la
+  cuenta a un movimiento que no la tenía; viaja como `editar`). `movDeItem()`
+  convierte cualquiera a forma de movimiento para saldos y listas.
 - Errores de datos (categoría, cuenta, monto, token) marcan el ítem como
   `bloqueado`: no se reintenta y la banda ofrece descartarlo.
 
@@ -112,6 +115,7 @@ Todas las peticiones llevan `token`. Respuestas: `{ok: true, datos}` o
 - `GET ?action=anual&anio=` → los 12 meses, con `conDatos` por mes.
 - `POST {action:'crear', uid, tipo, categoria, monto, fecha, descripcion, cuenta, cuentaDestino, conResumen, resumenAnio, resumenMes}`
 - `POST {action:'eliminar', uid, id, anio, conResumen, resumenAnio, resumenMes}`
+- `POST {action:'editar', uid, id, anio, cuenta, conResumen, resumenAnio, resumenMes}`
 
 `catalogo.cuentas`: `[{cuenta, tipo, emoji, disponible}]` (para el selector).
 
@@ -125,7 +129,8 @@ Todas las peticiones llevan `token`. Respuestas: `{ok: true, datos}` o
                             "signo": -1, "descripcion", "contraparte" }] }],
   "totalDisponible": 395000, "totalInvertido": 1100000,
   "configurado": true, "desde": "2026-10-02",
-  "sinCuenta": { "n": 0, "monto": 0 }
+  "sinCuenta": { "n": 0, "monto": 0, "lista": [{ "id", "fecha", "anio", "mes",
+                 "tipo", "categoria", "monto", "descripcion" }] }
 }
 ```
 
@@ -146,7 +151,8 @@ nuevo. Sin eso, en enero todas las cuentas volverían a cero.
   franja clara = presupuesto).
 - Número grande: **disponible en cuentas** en el mes en curso cuando las cuentas
   están configuradas; saldo del mes en meses pasados o sin configurar.
-- Avanzada: tarjetas de cuentas (tocar abre la conciliación), tendencia anual,
+- Avanzada: tarjetas de cuentas (tocar abre la conciliación), desplegable de
+  movimientos sin cuenta (tocar uno permite asignarle cuenta), tendencia anual,
   anillo por grupo, avance por categoría, movimientos del mes.
 
 ## Cómo probar
