@@ -214,6 +214,31 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   border-radius:13px;padding:10px 13px;font-size:13px;font-weight:700;margin-bottom:14px}
 .banda b{margin-left:auto;text-decoration:underline;white-space:nowrap}
 .banda.malo{background:#FCEAEA;color:#9B2C2C}
+/* ── Cuentas ── */
+.ctas-lbl{font-size:12px;font-weight:800;color:var(--muted);margin:0 2px 6px}
+.ctas{display:flex;gap:7px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:10px;scrollbar-width:none}
+.ctas::-webkit-scrollbar{display:none}
+.cta{flex:none;display:flex;align-items:center;gap:6px;background:#F6F4F1;border:1.5px solid transparent;
+  border-radius:999px;padding:7px 12px;font-size:13px;font-weight:800;white-space:nowrap}
+.cta[aria-pressed="true"]{border-color:var(--ink);background:var(--surface)}
+.cta .ce{font-size:15px;line-height:1}
+.hero .sub2{font-size:12.5px;font-weight:600;color:var(--muted);margin-top:12px}
+.hero .sub2 .over{color:var(--neg)}
+.cuenta-tot{display:flex;gap:8px;margin-bottom:10px}
+.cuenta-tot div{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 13px}
+.cuenta-tot small{display:block;font-size:11.5px;font-weight:700;color:var(--muted)}
+.cuenta-tot b{font-size:17px;font-weight:800}
+.row .amt.tr{color:var(--muted)}
+.row .amt.neg{color:var(--neg)}
+.chk{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;border-radius:99px;
+  padding:1px 7px;vertical-align:1px}
+.chk.ok{background:#DDF1E4;color:#1F6B45}
+.chk.mal{background:#FCEAEA;color:#9B2C2C}
+.concil-dif{border-radius:13px;padding:12px 14px;font-weight:700;font-size:13.5px;line-height:1.45;margin:0 0 14px}
+.concil-dif.ok{background:#DDF1E4;color:#1F6B45}
+.concil-dif.mal{background:#FCEAEA;color:#9B2C2C}
+.aviso{background:#FFF3D4;color:#7A5800;border-radius:13px;padding:11px 13px;font-size:13px;
+  font-weight:600;line-height:1.5;margin-bottom:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;background:var(--ink);color:#fff;
   padding:11px 20px;border-radius:999px;font-weight:700;font-size:14px;z-index:90;
   opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
@@ -291,6 +316,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
         <div class="pill"><span class="dot out"></span><span id="pillOut">$0</span></div>
         <div class="pill"><span class="dot in"></span><span id="pillIn">$0</span></div>
       </div>
+      <div class="sub2 hidden" id="heroSub"></div>
     </div>
 
     <div id="viewSimple">
@@ -301,7 +327,9 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
     </div>
 
     <div id="viewAdv" class="hidden">
-      <div class="section-title" style="margin-top:0">Tendencia anual</div>
+      <div class="section-title" style="margin-top:0">Tus cuentas hoy</div>
+      <div id="cuentasBox"></div>
+      <div class="section-title">Tendencia anual</div>
       <div class="anual-wrap" id="anualWrap">
         <div class="skel" id="anualSkel" style="height:140px"></div>
         <svg id="anualSvg" class="hidden" viewBox="0 0 300 130" preserveAspectRatio="none" aria-hidden="true"></svg>
@@ -330,6 +358,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   <div class="seg">
     <button id="segOut" aria-pressed="true">Gasto</button>
     <button id="segIn" aria-pressed="false">Ingreso</button>
+    <button id="segTr" aria-pressed="false">Transferir</button>
   </div>
   <div id="addErr" class="err hidden"></div>
   <div class="entry">
@@ -337,12 +366,19 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
     <div class="num zero" id="entryNum">$0</div>
   </div>
   <div class="cats" id="cats"></div>
+  <div id="ctaBox" class="hidden">
+    <div class="ctas-lbl" id="ctaLbl">Desde</div>
+    <div class="ctas" id="ctaOrigen"></div>
+    <div id="ctaDestBox" class="hidden">
+      <div class="ctas-lbl" id="ctaDestLbl">Hacia</div>
+      <div class="ctas" id="ctaDestino"></div>
+    </div>
+  </div>
   <div class="keys" id="keys"></div>
   <div class="fields">
     <div class="field"><label for="fDesc">Detalle</label>
       <input id="fDesc" type="text" placeholder="opcional" maxlength="80"></div>
     <div class="field"><label for="fDate">Fecha</label><input id="fDate" type="date"></div>
-    <div class="field"><label for="fMedio">Pagado con</label><select id="fMedio"></select></div>
   </div>
   <button class="btn" id="save" disabled>Guardar</button>
   <button class="btn ghost" id="cancel">Cancelar</button>
@@ -364,7 +400,7 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
     </div>
   </div>
   <button class="btn" id="cfgSave2">Guardar cambios</button>
-  <button class="btn ghost" id="cfgRefresh">Recargar categorías</button>
+  <button class="btn ghost" id="cfgRefresh">Recargar categorías y cuentas</button>
   <button class="btn danger" id="cfgClose" style="margin-top:8px">Cerrar</button>
 </div>
 
@@ -375,6 +411,25 @@ input,select{font-family:inherit;font-size:16px;color:inherit}
   <div id="movBody" style="font-size:14.5px;color:var(--muted);line-height:1.9;margin-bottom:16px"></div>
   <button class="btn danger" id="movDelete">Eliminar movimiento</button>
   <button class="btn ghost" id="movClose">Cerrar</button>
+</div>
+
+<!-- ══════════ HOJA: CONCILIAR CUENTA ══════════ -->
+<div class="sheet" id="ctaSheet">
+  <div class="grabber"></div>
+  <h2 id="ctaTitle">Cuenta</h2>
+  <div class="entry" style="padding-top:0">
+    <div class="lbl">Deberías tener</div>
+    <div class="num" id="ctaEsperado">$0</div>
+  </div>
+  <div class="fields">
+    <div class="field"><label for="ctaReal">Lo que ves en el banco</label>
+      <input id="ctaReal" type="text" inputmode="numeric" autocomplete="off" placeholder="escríbelo"></div>
+  </div>
+  <div id="ctaDif" class="concil-dif hidden"></div>
+  <div class="section-title" style="margin-top:4px">Lo registrado en esta cuenta</div>
+  <div class="card" id="ctaMovs"></div>
+  <div style="height:12px"></div>
+  <button class="btn ghost" id="ctaClose">Cerrar</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -392,6 +447,26 @@ var anio = hoy.getFullYear(), mes = hoy.getMonth() + 1;
 var catalogo = null, resumen = null, resumenServidor = null;
 var procesandoCola = false;
 var tipoSel = 'Egreso', catSel = null, digitos = '', movSel = null;
+var ctaSel = '', destSel = '', ctaActual = null;
+
+// ── Cuentas: utilidades ──
+function cuentasCat(){ return (catalogo && catalogo.cuentas) || []; }
+function infoCuenta(n){ return cuentasCat().filter(function(c){ return c.cuenta === n; })[0] || null; }
+function infoCategoria(n){
+  return (catalogo && catalogo.categorias.filter(function(c){ return c.categoria === n; })[0]) || null;
+}
+function leerPref(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }
+function guardarPref(k, v){ try { if (v) localStorage.setItem(k, v); } catch(e){} }
+function esAhorroSel(){
+  var i = catSel ? infoCategoria(catSel) : null;
+  return tipoSel === 'Egreso' && !!i && i.grupo === 'Ahorro';
+}
+function destinoAhorroPorDefecto(){
+  var previa = leerPref('fin.dest.Ahorro');
+  if (previa && infoCuenta(previa) && previa !== ctaSel) return previa;
+  var inv = cuentasCat().filter(function(c){ return !c.disponible && c.cuenta !== ctaSel; })[0];
+  return inv ? inv.cuenta : '';
+}
 var vistaSimple = true, anual = null, anualAnioMostrado = null;
 
 // ══════════ ANIMACION ══════════
@@ -594,6 +669,7 @@ function aplicarCola(){
   pend.filter(function(p){ return p.op === 'eliminar'; }).forEach(function(p){
     var m = p.mov;
     r.movimientos = r.movimientos.filter(function(x){ return x.id !== m.id; });
+    if (m.tipo === 'Transferencia') return;
     var bloque = (m.tipo === 'Ingreso') ? r.ingresos : r.egresos;
     bloque.real -= m.monto;
     bloque.diferencia = bloque.real - bloque.ppto;
@@ -618,8 +694,10 @@ function aplicarCola(){
     r.movimientos.unshift({
       id: p.uid, fecha: p.fecha, anio: p.anio, mes: p.mes, tipo: p.tipo,
       categoria: p.categoria, monto: p.monto, descripcion: p.descripcion,
-      medio: p.medio, pendiente: true, bloqueado: !!p.bloqueado
+      medio: p.medio, cuenta: p.cuenta || '', cuentaDestino: p.cuentaDestino || '',
+      pendiente: true, bloqueado: !!p.bloqueado
     });
+    if (p.tipo === 'Transferencia') return;
 
     var bloque = (p.tipo === 'Ingreso') ? r.ingresos : r.egresos;
     bloque.real += p.monto;
@@ -646,6 +724,18 @@ function aplicarCola(){
     }
   });
 
+  // Los saldos de cuentas son globales: todo lo pendiente cuenta, sea del mes que sea
+  if (r.cuentas && r.cuentas.lista) {
+    leerCola().forEach(function(p){
+      if (p.op === 'eliminar') efectoEnCuentas(r.cuentas, p.mov, -1);
+      else efectoEnCuentas(r.cuentas, p, +1);
+    });
+    var disp = 0, inv = 0;
+    r.cuentas.lista.forEach(function(c){ if (c.disponible) disp += c.saldo; else inv += c.saldo; });
+    r.cuentas.totalDisponible = disp;
+    r.cuentas.totalInvertido = inv;
+  }
+
   r.saldo.real = r.ingresos.real - r.egresos.real;
   r.tasaAhorro = r.ingresos.real > 0 ? r.saldo.real / r.ingresos.real : 0;
   r.grupos.forEach(function(g){
@@ -656,6 +746,27 @@ function aplicarCola(){
 
   resumen = r;
   return true;
+}
+
+/**
+ * Aplica un movimiento a los saldos de cuentas. Misma regla que el servidor:
+ * ingreso suma a su cuenta; egreso y transferencia restan de la cuenta y, si
+ * tienen destino, suman al destino. signo -1 deshace (eliminaciones pendientes).
+ */
+function efectoEnCuentas(cs, mv, signo){
+  if (!mv || !mv.monto) return;
+  function aplicar(nombre, delta){
+    var c = cs.lista.filter(function(x){ return x.cuenta === nombre; })[0];
+    if (!c) return;
+    if (c.fechaSaldo && mv.fecha && mv.fecha < c.fechaSaldo) return;
+    c.saldo += delta;
+  }
+  if (mv.tipo === 'Ingreso') {
+    if (mv.cuenta) aplicar(mv.cuenta, signo * mv.monto);
+  } else {
+    if (mv.cuenta) aplicar(mv.cuenta, -signo * mv.monto);
+    if (mv.cuentaDestino) aplicar(mv.cuentaDestino, signo * mv.monto);
+  }
 }
 
 /** Vuelve a fusionar y pintar. Se usa tras cualquier cambio en la cola. */
@@ -719,11 +830,9 @@ function mostrarError(err){
 
 function aplicarCatalogo(d){
   catalogo = d;
-  var sel = $('fMedio');
-  sel.innerHTML = '<option value=""></option>' + d.medios.map(function(m){
-    return '<option>' + esc(m) + '</option>';
-  }).join('');
   pintarCategorias();
+  if (!ctaSel || !infoCuenta(ctaSel)) prepararCuentas(); else pintarCuentas();
+  refrescarEntrada();
 }
 
 /**
@@ -744,7 +853,8 @@ function procesarCola(){
     ? { action: 'eliminar', uid: item.uid, id: item.mov.id, anio: item.anio }
     : { action: 'crear', uid: item.uid, tipo: item.tipo, categoria: item.categoria,
         monto: item.monto, fecha: item.fecha, descripcion: item.descripcion,
-        medio: item.medio, origen: item.origen };
+        medio: item.medio || '', origen: item.origen,
+        cuenta: item.cuenta || '', cuentaDestino: item.cuentaDestino || '' };
 
   // Pedimos el resumen en la misma respuesta: una peticion en vez de dos
   cuerpo.conResumen = true;
@@ -779,7 +889,7 @@ function procesarCola(){
       it.intentos = (it.intentos || 0) + 1;
       it.error = mensajeError(e);
       // Si el rechazo es por datos invalidos, reintentar no sirve de nada.
-      if (/categor|monto|tipo|Token/i.test(msg)) it.bloqueado = true;
+      if (/categor|monto|tipo|cuenta|Token/i.test(msg)) it.bloqueado = true;
       guardarCola(cola2);
     }
     repintar();
@@ -852,22 +962,44 @@ function pintarTodo(){
   if (animar && dir !== 0) animarEntradaContenido(dir);
 
   var saldo = resumen.saldo.real;
-  var h = $('heroAmount');
-  h.textContent = (saldo >= 0 ? '' : '−') + fmt(Math.abs(saldo));
-  h.classList.toggle('neg', saldo < 0);
+  var h = $('heroAmount'), nota = $('heroNote'), sub = $('heroSub');
+  var dif = resumen.egresos.diferencia;
+  var hoyD = new Date();
+  var esMesActual = (anio === hoyD.getFullYear() && mes === hoyD.getMonth() + 1);
+  var cs = resumen.cuentas;
 
-  var dif = resumen.egresos.diferencia, nota = $('heroNote');
-  if (resumen.egresos.ppto > 0 && dif > 0) {
-    nota.textContent = fmt(dif) + ' sobre presupuesto'; nota.className = 'note over';
-  } else if (resumen.egresos.ppto > 0) {
-    nota.textContent = fmt(-dif) + ' bajo presupuesto'; nota.className = 'note';
+  if (esMesActual && cs && cs.configurado) {
+    // Mes en curso con cuentas configuradas: el numero grande es lo disponible hoy
+    var total = cs.totalDisponible;
+    h.textContent = (total >= 0 ? '' : '−') + fmt(Math.abs(total));
+    h.classList.toggle('neg', total < 0);
+    nota.textContent = 'Disponible en tus cuentas'; nota.className = 'note';
+    var linea = 'Saldo de ' + MESES[mes-1] + ': ' + (saldo >= 0 ? '+' : '−') + fmt(Math.abs(saldo));
+    if (resumen.egresos.ppto > 0 && dif > 0) {
+      linea = esc(linea) + ' · <span class="over">' + fmt(dif) + ' sobre presupuesto</span>';
+    } else {
+      linea = esc(linea);
+    }
+    sub.innerHTML = linea;
+    sub.classList.remove('hidden');
   } else {
-    nota.textContent = 'Saldo del mes'; nota.className = 'note';
+    // Meses pasados, o cuentas sin configurar: el saldo del mes, como siempre
+    h.textContent = (saldo >= 0 ? '' : '−') + fmt(Math.abs(saldo));
+    h.classList.toggle('neg', saldo < 0);
+    if (resumen.egresos.ppto > 0 && dif > 0) {
+      nota.textContent = fmt(dif) + ' sobre presupuesto'; nota.className = 'note over';
+    } else if (resumen.egresos.ppto > 0) {
+      nota.textContent = fmt(-dif) + ' bajo presupuesto'; nota.className = 'note';
+    } else {
+      nota.textContent = 'Saldo del mes'; nota.className = 'note';
+    }
+    sub.classList.add('hidden');
   }
   $('pillOut').textContent = fmt(resumen.egresos.real);
   $('pillIn').textContent = fmt(resumen.ingresos.real);
 
   pintarBarras(animar); pintarRecientes(destacar); pintarAnillo(animar); pintarListaCat(); pintarMovs(destacar);
+  pintarCuentasAdv();
 }
 
 function animarEntradaContenido(dir){
@@ -921,20 +1053,185 @@ function reproducirEntradaBarras(){
 }
 
 function filaMov(m){
-  var c = (catalogo.categorias.filter(function(x){ return x.categoria === m.categoria; })[0]) || {};
-  var t = tinte(c.grupo);
+  var esTr = m.tipo === 'Transferencia';
+  var c = esTr ? {} : (infoCategoria(m.categoria) || {});
+  var t = esTr ? ['#EEF0F4', '#4A5468'] : tinte(c.grupo);
+  var nombre = esTr ? 'Transferencia' : m.categoria;
+  var emoji = esTr ? '⇄' : (c.emoji || '•');
   var d = m.fecha.split('-');
-  var sub = d[2] + ' ' + MESES[Number(d[1])-1].slice(0,3) + (m.descripcion ? ' · ' + m.descripcion : '');
+  var partes = [d[2] + ' ' + MESES[Number(d[1])-1].slice(0,3)];
+  if (esTr) {
+    partes.push((m.cuenta || '?') + ' → ' + (m.cuentaDestino || '?'));
+    if (m.descripcion) partes.push(m.descripcion);
+  } else {
+    if (m.descripcion) partes.push(m.descripcion);
+    var cta = m.cuenta || '';
+    if (m.cuentaDestino) cta = (cta ? cta + ' → ' : '→ ') + m.cuentaDestino;
+    if (cta) partes.push(cta);
+  }
   var chip = m.pendiente
     ? '<span class="chip-pend">' + (m.bloqueado ? 'sin guardar' : 'enviando') + '</span>' : '';
+  var clase = esTr ? 'tr' : (m.tipo === 'Ingreso' ? 'in' : '');
+  var signo = esTr ? '' : (m.tipo === 'Ingreso' ? '+' : '−');
   return '<button class="row' + (m.pendiente ? ' pend' : '') + '" data-id="' + esc(m.id) +
     '" style="width:100%;text-align:left">' +
-    '<span class="avatar" style="background:' + t[0] + '">' + esc(c.emoji || '•') + '</span>' +
-    '<span class="body"><span class="name">' + esc(m.categoria) + chip + '</span>' +
-    '<span class="sub">' + esc(sub) + '</span></span>' +
-    '<span class="amt ' + (m.tipo === 'Ingreso' ? 'in' : '') + '">' +
-      (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto) + '</span></button>';
+    '<span class="avatar" style="background:' + t[0] + ';color:' + t[1] + '">' + esc(emoji) + '</span>' +
+    '<span class="body"><span class="name">' + esc(nombre) + chip + '</span>' +
+    '<span class="sub">' + esc(partes.join(' · ')) + '</span></span>' +
+    '<span class="amt ' + clase + '">' + signo + fmt(m.monto) + '</span></button>';
 }
+
+// ══════════ CUENTAS: VISTA AVANZADA ══════════
+function fmtS(n){ return (n < 0 ? '−' : '') + fmt(Math.abs(n)); }
+function aEntero(txt){
+  var r = String(txt || '').replace(/\u2212/g, '-').replace(/[^0-9-]/g, '');
+  if (!r || r === '-' || isNaN(Number(r))) return null;
+  return Number(r);
+}
+function fmtCampo(n){ return (n < 0 ? '-' : '') + fmt(Math.abs(n)); }
+
+function leerReal(nombre){
+  try { return JSON.parse(localStorage.getItem('fin.real.' + nombre) || 'null'); } catch(e){ return null; }
+}
+function guardarReal(nombre, valor){
+  try { localStorage.setItem('fin.real.' + nombre, JSON.stringify({ valor: valor, fecha: iso(new Date()) })); } catch(e){}
+}
+
+/** Etiqueta "cuadra" / "±$X" si la cuenta se reviso hoy. Una revision de ayer ya no vale. */
+function chequeoHoy(nombre, saldo){
+  var r = leerReal(nombre);
+  if (!r || r.fecha !== iso(new Date())) return '';
+  var d = r.valor - saldo;
+  if (d === 0) return '<span class="chk ok">cuadra</span>';
+  return '<span class="chk mal">' + (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + '</span>';
+}
+
+function pintarCuentasAdv(){
+  var box = $('cuentasBox');
+  if (!box || !resumen) return;
+  var cs = resumen.cuentas;
+  if (!cs || !cs.lista || !cs.lista.length) {
+    box.innerHTML = '<div class="aviso">Las cuentas todavía no están activas. Ejecuta <b>migrarCuentas</b> en el editor del script.</div>';
+    return;
+  }
+  var html = '';
+  if (!cs.configurado) {
+    html += '<div class="aviso">Anota el <b>saldo inicial</b> y la <b>fecha</b> de cada cuenta en la pestaña ' +
+      'Cuentas de tu hoja. Desde ahí la app calcula cuánto debería haber en cada una.</div>';
+  }
+  var hayInv = cs.lista.some(function(c){ return !c.disponible; });
+  html += '<div class="cuenta-tot"><div><small>Disponible</small><b>' + fmtS(cs.totalDisponible) + '</b></div>' +
+    (hayInv ? '<div><small>Invertido</small><b>' + fmtS(cs.totalInvertido) + '</b></div>' : '') + '</div>';
+  if (cs.sinCuenta && cs.sinCuenta.n) {
+    html += '<div class="aviso">' + cs.sinCuenta.n +
+      (cs.sinCuenta.n === 1 ? ' movimiento' : ' movimientos') + ' sin cuenta asignada, por ' +
+      fmt(cs.sinCuenta.monto) + '. No suman ni restan en ninguna cuenta.</div>';
+  }
+  html += '<div class="card">' + cs.lista.map(function(c){
+    var sub = c.tipo + (c.disponible ? '' : ' · fuera del disponible') +
+      (c.configurada ? '' : ' · falta saldo inicial');
+    return '<button class="row" data-cta="' + esc(c.cuenta) + '" style="width:100%;text-align:left">' +
+      '<span class="avatar" style="background:#F1EFEB">' + esc(c.emoji || '•') + '</span>' +
+      '<span class="body"><span class="name">' + esc(c.cuenta) + chequeoHoy(c.cuenta, c.saldo) + '</span>' +
+      '<span class="sub">' + esc(sub) + '</span></span>' +
+      '<span class="amt' + (c.saldo < 0 ? ' neg' : '') + '">' + fmtS(c.saldo) + '</span></button>';
+  }).join('') + '</div>';
+  box.innerHTML = html;
+}
+
+function filaCtaMov(u){
+  var esTr = u.tipo === 'Transferencia';
+  var info = esTr ? {} : (infoCategoria(u.categoria) || {});
+  var t = esTr ? ['#EEF0F4', '#4A5468'] : tinte(info.grupo);
+  var d = u.fecha.split('-');
+  var partes = [d[2] + ' ' + MESES[Number(d[1])-1].slice(0,3)];
+  if (u.contraparte) partes.push((u.signo > 0 ? 'desde ' : 'hacia ') + u.contraparte);
+  if (u.descripcion) partes.push(u.descripcion);
+  var chip = u.pendiente ? '<span class="chip-pend">enviando</span>' : '';
+  return '<div class="row' + (u.pendiente ? ' pend' : '') + '">' +
+    '<span class="avatar" style="background:' + t[0] + ';color:' + t[1] + '">' +
+      esc(esTr ? '⇄' : (info.emoji || '•')) + '</span>' +
+    '<span class="body"><span class="name">' + esc(esTr ? 'Transferencia' : (u.categoria || u.tipo)) + chip + '</span>' +
+    '<span class="sub">' + esc(partes.join(' · ')) + '</span></span>' +
+    '<span class="amt' + (u.signo > 0 ? ' in' : '') + '">' + (u.signo > 0 ? '+' : '−') + fmt(u.monto) + '</span></div>';
+}
+
+function abrirCuenta(nombre){
+  var cs = resumen && resumen.cuentas;
+  var c = cs && cs.lista.filter(function(x){ return x.cuenta === nombre; })[0];
+  if (!c) return;
+  ctaActual = c;
+  $('ctaTitle').textContent = (c.emoji ? c.emoji + ' ' : '') + c.cuenta;
+  $('ctaEsperado').textContent = fmtS(c.saldo);
+  var prev = leerReal(c.cuenta);
+  $('ctaReal').value = (prev && prev.fecha === iso(new Date())) ? fmtCampo(prev.valor) : '';
+  calcularDifCuenta(false);
+
+  // Lo pendiente de enviar tambien cuenta, y lo que se esta eliminando no
+  var cola = leerCola();
+  var eliminando = cola.filter(function(p){ return p.op === 'eliminar'; })
+    .map(function(p){ return p.mov.id; });
+  var pend = [];
+  cola.forEach(function(p){
+    if (p.op === 'eliminar') return;
+    if (p.tipo === 'Ingreso' && p.cuenta === c.cuenta) {
+      pend.push({ fecha: p.fecha, tipo: p.tipo, categoria: p.categoria, monto: p.monto,
+                  signo: 1, descripcion: p.descripcion, contraparte: '', pendiente: true });
+    } else if (p.tipo !== 'Ingreso') {
+      if (p.cuenta === c.cuenta) pend.push({ fecha: p.fecha, tipo: p.tipo, categoria: p.categoria,
+        monto: p.monto, signo: -1, descripcion: p.descripcion, contraparte: p.cuentaDestino, pendiente: true });
+      if (p.cuentaDestino === c.cuenta) pend.push({ fecha: p.fecha, tipo: p.tipo, categoria: p.categoria,
+        monto: p.monto, signo: 1, descripcion: p.descripcion, contraparte: p.cuenta, pendiente: true });
+    }
+  });
+  var lista = pend.reverse().concat((c.ultimos || []).filter(function(u){
+    return eliminando.indexOf(u.id) < 0;
+  }));
+
+  var html = lista.map(filaCtaMov).join('');
+  if (c.configurada) {
+    var fs = c.fechaSaldo ? c.fechaSaldo.split('-') : null;
+    html += '<div class="row"><span class="avatar" style="background:#F1EFEB">⚑</span>' +
+      '<span class="body"><span class="name">Saldo inicial</span>' +
+      '<span class="sub">' + (fs ? esc(fs[2] + ' ' + MESES[Number(fs[1])-1].slice(0,3) + ' ' + fs[0]) : 'sin fecha') +
+      '</span></span><span class="amt tr">' + fmtS(c.saldoInicial) + '</span></div>';
+  }
+  $('ctaMovs').innerHTML = html ||
+    '<div class="empty">Todavía no hay movimientos registrados en esta cuenta.</div>';
+  abrir('ctaSheet');
+}
+
+function calcularDifCuenta(guardar){
+  var box = $('ctaDif');
+  var real = aEntero($('ctaReal').value);
+  if (!ctaActual || real === null) { box.classList.add('hidden'); return; }
+  var d = real - ctaActual.saldo;
+  if (guardar) guardarReal(ctaActual.cuenta, real);
+  if (d === 0) {
+    box.className = 'concil-dif ok';
+    box.textContent = 'Cuadra. Todo lo de esta cuenta está registrado.';
+  } else if (d < 0) {
+    box.className = 'concil-dif mal';
+    box.textContent = 'Tienes ' + fmt(-d) + ' menos de lo esperado. Lo más probable: un gasto sin ' +
+      'registrar, o un ingreso anotado de más o en otra cuenta.';
+  } else {
+    box.className = 'concil-dif mal';
+    box.textContent = 'Tienes ' + fmt(d) + ' más de lo esperado. Lo más probable: un ingreso sin ' +
+      'registrar, o un gasto anotado de más o en otra cuenta.';
+  }
+}
+
+$('ctaReal').addEventListener('input', function(){ calcularDifCuenta(true); });
+$('ctaReal').addEventListener('blur', function(){
+  var n = aEntero(this.value);
+  if (n !== null) this.value = fmtCampo(n);
+});
+$('ctaClose').onclick = function(){ cerrarTodo(); };
+
+document.addEventListener('click', function(ev){
+  var b = ev.target.closest('.row[data-cta]');
+  if (b) abrirCuenta(b.dataset.cta);
+});
 
 function pintarRecientes(destacar){
   var l = resumen.movimientos.slice(0,6);
@@ -1198,7 +1495,8 @@ function cambiarVista(simple){
 function abrir(id){ $('scrim').classList.add('on'); $(id).classList.add('on'); }
 function cerrarTodo(){
   $('scrim').classList.remove('on');
-  ['addSheet','cfgSheet','movSheet'].forEach(function(i){ $(i).classList.remove('on'); });
+  ['addSheet','cfgSheet','movSheet','ctaSheet'].forEach(function(i){ $(i).classList.remove('on'); });
+  if (resumen) pintarCuentasAdv();
 }
 $('scrim').onclick = cerrarTodo;
 $('cancel').onclick = cerrarTodo;
@@ -1240,19 +1538,79 @@ $('fab').onclick = function(){
   digitos = ''; catSel = null; $('fDesc').value = '';
   $('fDate').value = iso(new Date());
   $('addErr').classList.add('hidden');
+  prepararCuentas();
   pintarCategorias(); refrescarEntrada(); abrir('addSheet');
 };
 $('segOut').onclick = function(){ ponerTipo('Egreso'); };
 $('segIn').onclick = function(){ ponerTipo('Ingreso'); };
+$('segTr').onclick = function(){ ponerTipo('Transferencia'); };
 function ponerTipo(t){
   tipoSel = t; catSel = null;
   $('segOut').setAttribute('aria-pressed', t === 'Egreso');
   $('segIn').setAttribute('aria-pressed', t === 'Ingreso');
+  $('segTr').setAttribute('aria-pressed', t === 'Transferencia');
+  prepararCuentas();
   pintarCategorias(); refrescarEntrada();
 }
 
+/** Cuenta por defecto: la ultima usada para ese tipo de movimiento. */
+function prepararCuentas(){
+  var l = cuentasCat();
+  var primera = l.length ? l[0].cuenta : '';
+  var previa = leerPref('fin.cta.' + tipoSel);
+  ctaSel = (previa && infoCuenta(previa)) ? previa : primera;
+  destSel = '';
+  if (tipoSel === 'Transferencia') {
+    var pd = leerPref('fin.dest.Transferencia');
+    destSel = (pd && infoCuenta(pd) && pd !== ctaSel) ? pd
+      : ((l.filter(function(c){ return c.cuenta !== ctaSel; })[0] || {}).cuenta || '');
+  }
+  pintarCuentas();
+}
+
+function chipCuenta(c, sel, lado){
+  return '<button class="cta" data-lado="' + lado + '" data-cuenta="' + esc(c.cuenta) +
+    '" aria-pressed="' + sel + '"><span class="ce">' + esc(c.emoji || '•') + '</span>' +
+    esc(c.cuenta) + '</button>';
+}
+
+function pintarCuentas(){
+  var l = cuentasCat(), box = $('ctaBox');
+  if (!l.length) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  var ahorro = esAhorroSel();
+  var conDest = tipoSel === 'Transferencia' || ahorro;
+  $('ctaLbl').textContent = tipoSel === 'Ingreso' ? 'Llega a' : 'Desde';
+  $('ctaDestLbl').textContent = ahorro ? 'Hacia (opcional · toca de nuevo para quitar)' : 'Hacia';
+  $('ctaOrigen').innerHTML = l.map(function(c){ return chipCuenta(c, c.cuenta === ctaSel, 'o'); }).join('');
+  $('ctaDestBox').classList.toggle('hidden', !conDest);
+  $('ctaDestino').innerHTML = conDest
+    ? l.filter(function(c){ return c.cuenta !== ctaSel; })
+        .map(function(c){ return chipCuenta(c, c.cuenta === destSel, 'd'); }).join('')
+    : '';
+}
+
+$('ctaBox').addEventListener('click', function(ev){
+  var b = ev.target.closest('.cta');
+  if (!b) return;
+  var n = b.dataset.cuenta;
+  if (b.dataset.lado === 'o') {
+    ctaSel = n;
+    if (destSel === n) destSel = '';
+    if (tipoSel === 'Transferencia' && !destSel) {
+      destSel = (cuentasCat().filter(function(c){ return c.cuenta !== ctaSel; })[0] || {}).cuenta || '';
+    }
+  } else {
+    destSel = (esAhorroSel() && destSel === n) ? '' : n;
+  }
+  pintarCuentas(); refrescarEntrada();
+});
+
 function pintarCategorias(){
   if (!catalogo) return;
+  var esTr = tipoSel === 'Transferencia';
+  $('cats').classList.toggle('hidden', esTr);
+  if (esTr) { $('cats').innerHTML = ''; return; }
   var l = catalogo.categorias.filter(function(c){ return c.tipo === tipoSel; });
   $('cats').innerHTML = l.map(function(c){
     var t = tinte(c.grupo);
@@ -1263,7 +1621,15 @@ function pintarCategorias(){
       '<div class="n">' + esc(c.categoria) + '</div></button>';
   }).join('');
   Array.prototype.forEach.call($('cats').children, function(b){
-    b.onclick = function(){ catSel = b.dataset.cat; pintarCategorias(); refrescarEntrada(); };
+    b.onclick = function(){
+      catSel = b.dataset.cat;
+      if (esAhorroSel()) {
+        if (!destSel || destSel === ctaSel) destSel = destinoAhorroPorDefecto();
+      } else {
+        destSel = '';
+      }
+      pintarCategorias(); pintarCuentas(); refrescarEntrada();
+    };
   });
 }
 
@@ -1287,8 +1653,16 @@ function refrescarEntrada(){
   var el = $('entryNum');
   el.textContent = fmt(n);
   el.classList.toggle('zero', n === 0);
-  $('entryLbl').textContent = catSel ? catSel : 'Elige una categoría';
-  $('save').disabled = !(catSel && n > 0);
+  var hayCuentas = cuentasCat().length > 0;
+  var ok;
+  if (tipoSel === 'Transferencia') {
+    $('entryLbl').textContent = (ctaSel && destSel) ? (ctaSel + ' → ' + destSel) : 'Elige las dos cuentas';
+    ok = hayCuentas && !!ctaSel && !!destSel && ctaSel !== destSel && n > 0;
+  } else {
+    $('entryLbl').textContent = catSel ? catSel : 'Elige una categoría';
+    ok = !!catSel && n > 0 && (!hayCuentas || !!ctaSel);
+  }
+  $('save').disabled = !ok;
 }
 
 $('save').onclick = function(){
@@ -1299,18 +1673,26 @@ $('save').onclick = function(){
   var a = Number(f[0]), m = Number(f[1]);
   if (!a || !m) { fechaEnv = iso(new Date()); f = fechaEnv.split('-'); a = Number(f[0]); m = Number(f[1]); }
 
+  var esTr = tipoSel === 'Transferencia';
+  var conDest = esTr || esAhorroSel();
   var item = {
     uid: nuevoUid(),
-    tipo: tipoSel, categoria: catSel, monto: Number(digitos),
+    tipo: tipoSel, categoria: esTr ? '' : catSel, monto: Number(digitos),
     fecha: fechaEnv, descripcion: $('fDesc').value.trim(),
-    medio: $('fMedio').value, origen: 'App',
+    medio: '', origen: 'App',
+    cuenta: ctaSel || '', cuentaDestino: conDest ? (destSel || '') : '',
     anio: a, mes: m, intentos: 0
   };
+
+  // La proxima vez la app propone las mismas cuentas
+  guardarPref('fin.cta.' + tipoSel, ctaSel);
+  if (esTr) guardarPref('fin.dest.Transferencia', destSel);
+  if (!esTr && conDest && destSel) guardarPref('fin.dest.Ahorro', destSel);
 
   var cola = leerCola(); cola.push(item); guardarCola(cola);
 
   cerrarTodo();
-  toast('Guardado');
+  toast(esTr ? 'Transferencia guardada' : 'Guardado');
   destacarPrimeraFila = true;
   anio = a; mes = m;
   $('mLabel').textContent = etiquetaMes();
@@ -1323,11 +1705,17 @@ $('save').onclick = function(){
 // ══════════ DETALLE / ELIMINAR ══════════
 function abrirMov(m){
   movSel = m;
-  $('movTitle').textContent = (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto);
+  var esTr = m.tipo === 'Transferencia';
+  $('movTitle').textContent = esTr ? fmt(m.monto) : (m.tipo === 'Ingreso' ? '+' : '−') + fmt(m.monto);
   var d = m.fecha.split('-');
+  var lineaCta = '';
+  if (esTr) lineaCta = 'De ' + (m.cuenta || '?') + ' a ' + (m.cuentaDestino || '?');
+  else if (m.tipo === 'Ingreso' && m.cuenta) lineaCta = 'Llegó a ' + m.cuenta;
+  else if (m.cuenta) lineaCta = 'Desde ' + m.cuenta + (m.cuentaDestino ? ' hacia ' + m.cuentaDestino : '');
   $('movBody').innerHTML =
-    '<div>' + esc(m.categoria) + '</div>' +
+    '<div>' + esc(esTr ? 'Transferencia entre tus cuentas' : m.categoria) + '</div>' +
     '<div>' + d[2] + ' de ' + MESES[Number(d[1])-1] + ' de ' + d[0] + '</div>' +
+    (lineaCta ? '<div>' + esc(lineaCta) + '</div>' : '') +
     (m.medio ? '<div>Pagado con ' + esc(m.medio) + '</div>' : '') +
     (m.descripcion ? '<div>' + esc(m.descripcion) + '</div>' : '') +
     '<div style="font-size:12.5px;opacity:.7">' + esc(m.id) + '</div>';
@@ -1358,7 +1746,8 @@ $('movDelete').onclick = function(){
   cola.push({
     uid: nuevoUid(), op: 'eliminar', anio: anio, mes: mes, intentos: 0,
     mov: { id: movSel.id, tipo: movSel.tipo, categoria: movSel.categoria,
-           monto: movSel.monto, fecha: movSel.fecha }
+           monto: movSel.monto, fecha: movSel.fecha,
+           cuenta: movSel.cuenta || '', cuentaDestino: movSel.cuentaDestino || '' }
   });
   guardarCola(cola);
   cerrarTodo(); toast('Eliminado');

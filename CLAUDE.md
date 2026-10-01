@@ -1,8 +1,9 @@
 # Finanzas — app personal de gastos
 
-App web de finanzas personales de uso individual. Registra ingresos y egresos
-desde el celular y los guarda en una hoja de Google, que sigue siendo auditable
-a mano.
+App web de finanzas personales de uso individual. Registra ingresos, egresos y
+transferencias desde el celular, los guarda en una hoja de Google que sigue
+siendo auditable a mano, y calcula cuánto debería haber en cada cuenta para
+conciliar contra los bancos.
 
 ## Arquitectura
 
@@ -14,12 +15,8 @@ index.html  ──HTTP──>  Apps Script (Web App)  ──>  Google Sheets
 - **Front-end**: un único `index.html` con HTML, CSS y JS embebidos. Sin
   frameworks, sin compilación, sin `node_modules`. GitHub Pages lo sirve tal cual.
 - **Back-end**: Google Apps Script publicado como Web App. El código vive en
-  Google, no en este repositorio.
-- **Base de datos**: Google Sheets. Una pestaña `Movimientos` como registro
-  continuo, más `Categorias`, `Presupuesto`, `Config` y dos hojas de resumen
-  con fórmulas.
-
-Archivos del repo:
+  Google (proyecto "Finanzas Personales Script"), no en este repositorio.
+- **Base de datos**: Google Sheets, un archivo por año (`Finanzas_2026`, ...).
 
 | Archivo | Para qué |
 |---|---|
@@ -28,130 +25,132 @@ Archivos del repo:
 | `apple-touch-icon.png` | Ícono de iOS (180×180, sin esquinas redondeadas) |
 | `icono-192.png`, `icono-512.png` | Íconos del manifiesto |
 
-## Restricciones del proyecto
+## La hoja de cálculo
 
-Estas no son preferencias de estilo, son decisiones tomadas:
+**Movimientos** (columnas por posición; no reordenar):
+
+| A | B | C | D | E | F | G | H | I | J | K |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ID | Fecha | Tipo | Categoría | Monto | Descripción | Medio (histórico) | Origen | Marca de tiempo | Cuenta | Cuenta destino |
+
+- `Tipo`: `Ingreso`, `Egreso` o `Transferencia`.
+- `Monto` siempre positivo. El signo lo determina el tipo.
+- `Cuenta`: en un Ingreso, donde llega; en Egreso o Transferencia, de donde sale.
+- `Cuenta destino`: en una Transferencia, a dónde va. En un Egreso de categoría
+  del grupo Ahorro, la cuenta de inversión que recibe (ej. Racional).
+- Las Transferencias no tienen categoría y no cuentan como ingreso ni egreso.
+
+**Cuentas**: `Cuenta | Tipo | Saldo inicial | Fecha del saldo | Emoji | En disponible | Activa | Saldo esperado`.
+La columna H calcula con fórmulas la misma regla que el backend, para auditar a mano.
+`En disponible = NO` saca la cuenta del total principal (Racional, inversiones).
+
+También: `Categorias`, `Presupuesto`, `Config`, `Resumen_Mensual`, `Resumen_Anual`.
+
+## Regla de saldos
+
+Saldo esperado = saldo inicial + movimientos con `fecha >= fecha del saldo`:
+
+- **Ingreso**: suma a `Cuenta`.
+- **Egreso**: resta de `Cuenta`; si tiene destino, suma al destino.
+- **Transferencia**: resta de `Cuenta`, suma a `Cuenta destino`.
+
+Esta regla está implementada en **tres lugares que deben coincidir siempre**:
+`calcularSaldos()` en el script, `efectoEnCuentas()` en `index.html`, y las
+fórmulas de la columna H de la hoja Cuentas. Si se cambia en uno, se cambia en
+los tres.
+
+## Restricciones del proyecto
 
 1. **Un solo archivo.** Todo el front-end vive en `index.html`. No separar en
    `.css` ni `.js`, no agregar dependencias npm, no introducir un paso de build.
-   La app tiene que poder abrirse con doble clic y funcionar.
-2. **Sin frameworks.** Nada de React, Vue ni Svelte. JavaScript plano, ES5+
-   compatible con Safari de iOS.
-3. **Sin secretos en el código.** El repositorio es público. La clave de acceso
-   al backend la escribe el usuario una vez y queda en `localStorage`. Nunca
-   escribirla en el archivo.
-4. **Español de Chile** en toda la interfaz. Montos en pesos chilenos, sin
-   decimales, con `Intl.NumberFormat('es-CL')`.
+2. **Sin frameworks.** JavaScript plano, ES5+ compatible con Safari de iOS
+   (sin funciones flecha en el código de la app).
+3. **Sin secretos en el código.** El repositorio es público. La clave la
+   escribe el usuario una vez y queda en `localStorage`.
+4. **Español de Chile** en toda la interfaz. Pesos sin decimales con `fmt()`.
 
 ## Invariantes de la capa de red
 
-Cada una de estas líneas resuelve un problema concreto que ya costó depurar.
-**No modificarlas sin entender por qué están.**
+Cada una resuelve un problema que ya costó depurar. **No modificar sin
+entender por qué está.**
 
 - **`Content-Type: text/plain` en los POST.** Apps Script no responde a
-  peticiones `OPTIONS`. Con `application/json` el navegador dispara un preflight
-  CORS y la petición falla entera.
-- **`&_=Date.now()` y `cache: 'no-store'` en los GET.** Apps Script no manda
-  cabeceras anti-caché. Sin esto, Safari sirve la respuesta anterior y la
-  pantalla se queda congelada con datos viejos.
-- **El año viaja en `eliminar` y `editar`.** Cada año vive en un archivo
-  distinto; sin el año, el backend borraría en el archivo equivocado.
-- **La caché de `localStorage` se invalida al guardar y al eliminar.** Si se
-  omite, el usuario ve el movimiento en la hoja pero no en la app.
-- **Los montos se guardan siempre positivos.** El signo lo determina la columna
-  `Tipo` (`Ingreso` / `Egreso`).
+  `OPTIONS`; con `application/json` el preflight CORS rompe la petición.
+- **`&_=Date.now()` y `cache: 'no-store'` en los GET.** Sin esto Safari sirve
+  respuestas viejas.
+- **`normalizarUrl()` limpia `/u/1/`** de la dirección del script. Ese segmento
+  aparece al copiar la URL con varias cuentas de Google abiertas, convierte la
+  ruta en un archivo de Drive, y Safari la rechaza con "The string did not
+  match the expected pattern".
+- **Corte de 30 s con `AbortController`** en los POST.
+
+## Cola de envío (guardado optimista)
+
+Crear y eliminar **no esperan al servidor**. El movimiento entra a
+`localStorage` (`fin.cola`), se muestra al instante con la etiqueta
+"enviando", y `procesarCola()` lo manda en segundo plano, de a uno.
+
+- Cada ítem lleva un **`uid`**. El servidor lo recuerda 6 h en `CacheService`:
+  si llega dos veces, no duplica. Eliminar un id que ya no existe devuelve ok.
+  Sin esto, los reintentos tras un corte duplicaban o atascaban movimientos.
+- `aplicarCola()` reconstruye `resumen` a partir de `resumenServidor` más los
+  pendientes. Los totales del mes solo usan pendientes de ese mes; **los saldos
+  de cuentas usan todos los pendientes**, porque son globales.
+- Los POST piden `conResumen: true` y reciben el resumen actualizado en la misma
+  respuesta, para no hacer una segunda petición.
+- Reintentos: al abrir la app, al tocar ↻, al volver a primer plano, al
+  recuperar conexión y cada 20 s mientras haya pendientes.
+- Errores de datos (categoría, cuenta, monto, token) marcan el ítem como
+  `bloqueado`: no se reintenta y la banda ofrece descartarlo.
 
 ## Contrato del backend
 
-Todas las peticiones llevan `token`. Las respuestas tienen la forma
-`{ok: true, datos: ...}` o `{ok: false, error: "..."}`.
+Todas las peticiones llevan `token`. Respuestas: `{ok: true, datos}` o
+`{ok: false, error}`.
 
-### `GET ?action=inicio&anio=&mes=`
-Catálogo y resumen del mes en una sola llamada. Es lo que usa el arranque.
+- `GET ?action=inicio&anio=&mes=` → `{catalogo, resumen}`. Lo usa el arranque.
+- `GET ?action=anual&anio=` → los 12 meses, con `conDatos` por mes.
+- `POST {action:'crear', uid, tipo, categoria, monto, fecha, descripcion, cuenta, cuentaDestino, conResumen, resumenAnio, resumenMes}`
+- `POST {action:'eliminar', uid, id, anio, conResumen, resumenAnio, resumenMes}`
 
+`catalogo.cuentas`: `[{cuenta, tipo, emoji, disponible}]` (para el selector).
+
+`resumen.cuentas`:
 ```jsonc
 {
-  "catalogo": {
-    "anio": 2026,
-    "moneda": "CLP",
-    "archivo": "Finanzas_2026",
-    "aniosDisponibles": ["2026"],
-    "categorias": [
-      { "categoria": "Supermercado", "tipo": "Egreso", "grupo": "Gastos", "emoji": "🛒" }
-    ],
-    "medios": ["Efectivo", "Debito", "..."]
-  },
-  "resumen": {
-    "anio": 2026, "mes": 8,
-    "ingresos": { "real": 200000, "ppto": 0, "diferencia": 200000 },
-    "egresos":  { "real": 5890,   "ppto": 0, "diferencia": 5890 },
-    "saldo":    { "real": 194110, "ppto": 0 },
-    "tasaAhorro": 0.97,
-    "sinCategorizar": 0,
-    "grupos": [
-      { "grupo": "Gastos", "real": 5890, "ppto": 0, "diferencia": 5890, "porcentaje": 1 }
-    ],
-    "categorias": [
-      { "categoria": "Supermercado", "tipo": "Egreso", "grupo": "Gastos",
-        "emoji": "🛒", "real": 5890, "ppto": 0, "diferencia": 5890, "avance": null }
-    ],
-    "movimientos": [
-      { "id": "MOV-0003", "fecha": "2026-08-28", "anio": 2026, "mes": 8,
-        "tipo": "Egreso", "categoria": "Supermercado", "monto": 5890,
-        "descripcion": "Lider", "medio": "Debito", "fila": 4 }
-    ]
-  }
+  "lista": [{ "cuenta": "Banco Estado", "tipo": "Banco", "emoji": "🏦",
+              "disponible": true, "saldoInicial": 500000, "fechaSaldo": "2026-10-02",
+              "configurada": true, "saldo": 325000, "entradas": 0, "salidas": 0,
+              "ultimos": [{ "id", "fecha", "tipo", "categoria", "monto",
+                            "signo": -1, "descripcion", "contraparte" }] }],
+  "totalDisponible": 395000, "totalInvertido": 1100000,
+  "configurado": true, "desde": "2026-10-02",
+  "sinCuenta": { "n": 0, "monto": 0 }
 }
 ```
 
-### `GET ?action=anual&anio=`
-Los 12 meses del año. Pensado para gráficos de tendencia.
+`resumen.movimientos` incluye las transferencias; `resumen.categorias`,
+`grupos`, `ingresos` y `egresos` no.
 
-```jsonc
-{
-  "anio": 2026,
-  "meses": [
-    { "mes": 8, "ingresos": 200000, "egresos": 5890, "saldo": 194110,
-      "acumulado": 194110, "tasaAhorro": 0.97, "conDatos": true }
-    // ... los 12, en orden
-  ],
-  "totales": {
-    "ingresos": 380000, "egresos": 225890, "saldo": 154110,
-    "tasaAhorro": 0.40, "promedioEgresos": 112945,
-    "mesesConDatos": 2, "mejorMes": 8, "peorMes": 9
-  }
-}
-```
+## Rotación anual
 
-`conDatos: false` marca los meses sin movimientos: los que aún no llegan y los
-que pasaron vacíos. **Un gráfico no debe dibujar esos meses como saldo cero**,
-porque aplanaría la línea hasta diciembre.
-
-### `POST` (cuerpo JSON)
-- `{action: "crear", tipo, categoria, monto, fecha, descripcion, medio, origen}`
-- `{action: "eliminar", id, anio}`
-- `{action: "editar", id, anio, ...campos}`
+`crearArchivoDelAnio()` duplica el archivo, vacía Movimientos y **escribe los
+saldos de cierre como saldo inicial al 1 de enero** en la hoja Cuentas del año
+nuevo. Sin eso, en enero todas las cuentas volverían a cero.
 
 ## Lenguaje visual
 
-- **Acento**: coral `#F2854B`. **Fondo**: `#FBFAF8`. **Texto**: `#242A38`.
-- **Tipografía**: Nunito (400/600/800). Números grandes y gruesos.
-- **Tintes por grupo**, usados de forma consistente en barras, anillo y listas:
-  Servicios amarillo, Gastos rosa, Deudas violeta, Ahorro verde, ingresos azul
-  y oliva. Están en el objeto `TINTES`.
-- **Elemento distintivo**: las cinco barras verticales de la vista Simple. El
-  relleno sólido es el gasto real; la franja más clara detrás es el presupuesto.
-  Esa relación es la lectura principal de la app y no debe perderse.
-- **Dos vistas**: Simple (saldo, barras, últimos movimientos) y Avanzada
-  (anillo por grupo, avance por categoría, todos los movimientos).
+- Acento coral `#F2854B`, fondo `#FBFAF8`, texto `#242A38`. Tipografía Nunito.
+- Tintes por grupo en el objeto `TINTES`. Transferencias en gris azulado (⇄).
+- Elemento distintivo: las barras verticales de la vista Simple (relleno = gasto,
+  franja clara = presupuesto).
+- Número grande: **disponible en cuentas** en el mes en curso cuando las cuentas
+  están configuradas; saldo del mes en meses pasados o sin configurar.
+- Avanzada: tarjetas de cuentas (tocar abre la conciliación), tendencia anual,
+  anillo por grupo, avance por categoría, movimientos del mes.
 
 ## Cómo probar
 
-Abrir `index.html` directamente en Safari. Se conecta al backend real, así que
-se ve con datos verdaderos. La clave ya queda guardada entre recargas.
-
-Verificar siempre después de un cambio:
-1. El arranque pinta desde caché y luego actualiza (el ↻ gira mientras tanto).
-2. Guardar un movimiento lo refleja en la pantalla sin recargar.
-3. Navegar entre meses con las flechas funciona en ambas direcciones.
-4. Eliminar un movimiento lo quita de la lista.
+Abrir `index.html` en Safari: se conecta al backend real. Verificar después de
+cada cambio: arranque desde caché, guardar un gasto, una transferencia y un
+ahorro con destino, eliminar, navegar entre meses, y conciliar una cuenta.
